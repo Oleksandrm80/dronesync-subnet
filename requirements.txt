@@ -1,0 +1,7 @@
+konnex-sdk
+numpy
+scipy
+pyyaml
+requests
+websockets
+pytest
