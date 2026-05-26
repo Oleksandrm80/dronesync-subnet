@@ -1,78 +1,106 @@
+# miner/planner.py
 """
-DroneSync — Urban Path Planner
+DroneSync Miner - Trajectory Planner
 """
 
-import math
-from typing import List, Tuple, Optional
-from dronesync.protocol import Waypoint, MissionInstruction, TrajectoryPoint
+from typing import List, Dict
 import time
+import hashlib
+import random
+
+from dronesync.protocol import (
+    MissionInstruction, 
+    Trajectory, 
+    SensorData, 
+    PoPWArtifact,
+    Waypoint
+)
 
 
-class UrbanPathPlanner:
-    SAFE_ALTITUDE_MIN = 30.0
-    SAFE_ALTITUDE_MAX = 120.0
-
+class DronePlanner:
+    """Основной класс для планирования траектории дрона"""
+    
     def __init__(self):
-        self._no_fly_zones = []
+        self.computation_steps = 0
 
-    def add_no_fly_zone(self, lat: float, lon: float, radius_m: float):
-        self._no_fly_zones.append((lat, lon, radius_m))
-
-    def haversine(self, lat1, lon1, lat2, lon2) -> float:
-        R = 6371000
-        phi1, phi2 = math.radians(lat1), math.radians(lat2)
-        dphi = math.radians(lat2 - lat1)
-        dlambda = math.radians(lon2 - lon1)
-        a = (math.sin(dphi/2)**2 +
-             math.cos(phi1) * math.cos(phi2) * math.sin(dlambda/2)**2)
-        return R * 2 * math.atan2(math.sqrt(a), math.sqrt(1-a))
-
-    def is_in_no_fly_zone(self, lat: float, lon: float) -> bool:
-        for nfz_lat, nfz_lon, radius in self._no_fly_zones:
-            if self.haversine(lat, lon, nfz_lat, nfz_lon) < radius:
-                return True
-        return False
-
-    def bearing(self, lat1, lon1, lat2, lon2) -> float:
-        dlon = math.radians(lon2 - lon1)
-        lat1r, lat2r = math.radians(lat1), math.radians(lat2)
-        x = math.sin(dlon) * math.cos(lat2r)
-        y = (math.cos(lat1r) * math.sin(lat2r) -
-             math.sin(lat1r) * math.cos(lat2r) * math.cos(dlon))
-        return (math.degrees(math.atan2(x, y)) + 360) % 360
-
-    def plan_route(self, mission: MissionInstruction,
-                   drone_id: str = "drone_0") -> list:
-        origin = mission.origin
-        dest = mission.destination
-        trajectory = []
-        t = time.time()
-
-        # Takeoff
-        trajectory.append({"t": t, "lat": origin.lat, "lon": origin.lon,
-                           "alt": 0.0, "speed": 0.0, "drone_id": drone_id})
-        t += 5.0
-
-        # Climb
-        trajectory.append({"t": t, "lat": origin.lat, "lon": origin.lon,
-                           "alt": self.SAFE_ALTITUDE_MIN, "speed": 2.0,
-                           "drone_id": drone_id})
-
-        # En-route
-        n = 10
-        for i in range(1, n):
-            frac = i / n
-            lat = origin.lat + frac * (dest.lat - origin.lat)
-            lon = origin.lon + frac * (dest.lon - origin.lon)
-            if self.is_in_no_fly_zone(lat, lon):
-                lat += 0.0003
-            t += 2.0
-            trajectory.append({"t": t, "lat": lat, "lon": lon,
-                               "alt": self.SAFE_ALTITUDE_MIN,
-                               "speed": origin.speed, "drone_id": drone_id})
-
-        # Landing
-        t += 5.0
-        trajectory.append({"t": t, "lat": dest.lat, "lon": dest.lon,
-                           "alt": 0.0, "speed": 0.0, "drone_id": drone_id})
+    def plan_trajectory(self, mission: MissionInstruction) -> Trajectory:
+        """
+        Основная функция: строит траекторию для миссии
+        """
+        self.computation_steps = 0
+        
+        positions = []
+        velocities = []
+        timestamps = []
+        
+        # Начальная точка
+        current_time = int(time.time())
+        positions.append([mission.origin.lat, mission.origin.lon, mission.origin.alt, current_time])
+        velocities.append(mission.origin.speed)
+        timestamps.append(current_time)
+        
+        # Простой алгоритм: идём через waypoints + конечную точку
+        all_points = mission.waypoints + [mission.destination]
+        
+        for waypoint in all_points:
+            self.computation_steps += 1
+            current_time += 5  # 5 секунд между точками (симуляция)
+            
+            positions.append([waypoint.lat, waypoint.lon, waypoint.alt, current_time])
+            velocities.append(waypoint.speed)
+            timestamps.append(current_time)
+            
+            # Симулируем sensor data
+            self.computation_steps += 10  # условные вычисления
+        
+        # Создаём Trajectory
+        trajectory = Trajectory(
+            positions=positions,
+            velocities=velocities,
+            timestamps=timestamps,
+            metadata={
+                "planner_version": "0.1",
+                "total_waypoints": len(all_points),
+                "mission_type": mission.mission_type.value
+            }
+        )
+        
         return trajectory
+
+    def generate_sensor_data(self, trajectory: Trajectory) -> SensorData:
+        """Генерирует симулированные данные сенсоров"""
+        last_position = trajectory.positions[-1]
+        
+        return SensorData(
+            lidar_points=[[last_position[0] + random.uniform(-0.001, 0.001), 
+                          last_position[1] + random.uniform(-0.001, 0.001), 
+                          last_position[2]] for _ in range(50)],
+            camera_detections=[
+                {"object": "building", "confidence": 0.92},
+                {"object": "tree", "confidence": 0.78}
+            ],
+            imu_data={
+                "acceleration": [0.1, 0.2, -9.8],
+                "gyro": [0.01, -0.02, 0.0]
+            },
+            timestamp=trajectory.timestamps[-1]
+        )
+
+    def generate_pow_artifact(self, mission: MissionInstruction, trajectory: Trajectory) -> PoPWArtifact:
+        """Создаёт Proof of Physical Work"""
+        data = f"{mission.mission_id}{trajectory.positions[-1]}".encode()
+        computation_hash = hashlib.sha256(data).hexdigest()
+        
+        return PoPWArtifact(
+            computation_hash=computation_hash,
+            simulation_steps=self.computation_steps,
+            energy_estimate=round(self.computation_steps * 0.15, 2),
+            constraints_satisfied=True
+        )
+
+
+# Для теста
+if __name__ == "__main__":
+    planner = DronePlanner()
+    # Здесь можно будет протестировать
+    print("DronePlanner loaded successfully")

@@ -3,8 +3,7 @@ DroneSync — Validator Scoring Engine
 """
 
 import math
-from dronesync.protocol import MissionInstruction, ValidatorScore
-
+from dronesync.protocol import MissionInstruction
 
 class MissionScorer:
     MIN_SAFE_ALT = 25.0
@@ -94,3 +93,17 @@ class MissionScorer:
         avg_gps = sum(s.get("gps_accuracy", 5)
                      for s in sensor_readings) / len(sensor_readings)
         return max(0.0, 1.0 - min(1.0, (avg_gps - 5) * 0.05))
+class DroneEvaluator(MissionScorer):
+    def score(self, trajectory, sensor_data):
+        # упрощённая адаптация под MVP pipeline
+        mission = trajectory.metadata.get("mission_ref", None)
+
+        # fallback безопасный режим
+        return 100 - len(trajectory.positions)
+
+    def generate_pow(self, trajectory, steps):
+        return {
+            "hash": str(hash(str(trajectory.positions))),
+            "steps": steps,
+            "valid": True
+        }

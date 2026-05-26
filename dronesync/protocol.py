@@ -1,12 +1,11 @@
+# dronesync/protocol.py
 """
 DroneSync Subnet — Core Protocol Definitions
 """
 
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import List, Optional
-import hashlib
-import json
+from typing import List, Optional, Dict, Any
 import time
 
 
@@ -55,12 +54,53 @@ class MissionInstruction:
             "mission_type": self.mission_type.value,
             "origin": vars(self.origin),
             "destination": vars(self.destination),
+            "waypoints": [vars(wp) for wp in self.waypoints],
             "drone_count": self.drone_count,
             "payload_kg": self.payload_kg,
             "priority": self.priority,
+            "deadline_unix": self.deadline_unix,
             "reward_knx": self.reward_knx,
+            "created_at": self.created_at,
         }
 
-    def instruction_hash(self) -> str:
-        payload = json.dumps(self.to_dict(), sort_keys=True)
-        return hashlib.sha256(payload.encode()).hexdigest()
+
+@dataclass
+class Trajectory:
+    positions: List[List[float]]  # [lat, lon, alt, timestamp]
+    velocities: List[float]
+    timestamps: List[int]
+    metadata: Dict = field(default_factory=dict)
+
+
+@dataclass
+class SensorData:
+    lidar_points: List[List[float]]
+    camera_detections: List[Dict]
+    imu_data: Dict
+    timestamp: int
+
+
+@dataclass
+class PoPWArtifact:
+    computation_hash: str
+    simulation_steps: int
+    energy_estimate: float
+    constraints_satisfied: bool
+
+
+# Bittensor Synapse - основной класс для общения между miner и validator
+from pydantic import Field
+
+
+class DroneSyncSynapse:
+    """MVP placeholder - no bittensor dependency"""
+    pass
+    mission: MissionInstruction
+    trajectory: Optional[Trajectory] = None
+    sensor_data: Optional[SensorData] = None
+    pow_artifact: Optional[PoPWArtifact] = None
+    score: Optional[float] = None
+    metadata: Dict = Field(default_factory=dict)
+
+    class Config:
+        arbitrary_types_allowed = True
