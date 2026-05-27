@@ -48,14 +48,25 @@ python -m validator.scorer --wallet YOUR_WALLET --netuid 4 --network testnet
 ## Demo Output
 
 $ python main.py
-🚀 DroneSync MVP starting...
-✅ trajectory created
-✅ environment simulation done
-✅ score computed: 96
-🎯 DroneSync run completed
 
-Pipeline: mission → trajectory → simulation → scoring → PoPW artifact
-Status: fully operational on local testnet environment
+DroneSync MVP starting...
 
+==================================================
+SINGLE DRONE MISSION
+==================================================
+trajectory created
+environment simulation done
+score computed: 96
+
+==================================================
+SWARM MISSION - 3 DRONES
+==================================================
+3 trajectories planned
+drone_0: status=CLEAR, collision_risks=0
+drone_1: status=CLEAR, collision_risks=0
+drone_2: status=CLEAR, collision_risks=0
+
+DroneSync pipeline completed successfully
+PoPW artifact ready for on-chain submission
 - Konnex Testnet: https://subnets.testnet.konnex.world
 - Twitter: @OleksandrM80
