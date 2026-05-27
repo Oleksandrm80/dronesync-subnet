@@ -1,4 +1,4 @@
-from miner.planner import DronePlanner
+from miner.planner import DronePlanner, AIPlanner
 from environment.sim import DroneEnvironment, SwarmEnvironment
 from validator.scorer import DroneEvaluator
 
@@ -56,10 +56,34 @@ def run_swarm():
     print()
 
 
+def run_ai_planner():
+    print("=" * 50)
+    print("AI PLANNER - LEARNING MODE")
+    print("=" * 50)
+    ai_planner = AIPlanner()
+    validator = DroneEvaluator()
+    env = DroneEnvironment()
+
+    for i in range(3):
+        mission = FakeMission()
+        trajectory = ai_planner.plan_trajectory(mission)
+        sensor_data = env.run(trajectory)
+        score = validator.score(trajectory, sensor_data)
+        ai_planner.learn_from_score(score)
+        weights = ai_planner.learned_weights
+        print("mission " + str(i+1) + ": score=" + str(score) +
+              " | safety=" + str(round(weights["safety"], 2)) +
+              " efficiency=" + str(round(weights["efficiency"], 2)))
+
+    print("AI planner trained on 3 missions")
+    print()
+
+
 def run_demo():
     print("\nDroneSync MVP starting...\n")
     run_single_drone()
     run_swarm()
+    run_ai_planner()
     print("DroneSync pipeline completed successfully")
     print("PoPW artifact ready for on-chain submission")
 

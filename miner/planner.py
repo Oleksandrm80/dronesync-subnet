@@ -104,3 +104,93 @@ if __name__ == "__main__":
     planner = DronePlanner()
     # Здесь можно будет протестировать
     print("DronePlanner loaded successfully")
+class AIPlanner:
+    """
+    AI-enhanced trajectory planner.
+    Learns from previous missions to optimize routes.
+    Uses weighted scoring to improve path quality over time.
+    """
+
+    def __init__(self):
+        self.mission_history = []
+        self.learned_weights = {
+            "safety": 0.40,
+            "efficiency": 0.35,
+            "energy": 0.25
+        }
+
+    def plan_trajectory(self, mission) -> Trajectory:
+        """Plan trajectory using AI-weighted optimization."""
+        import time
+        positions = []
+        velocities = []
+        timestamps = []
+
+        current_time = int(time.time())
+
+        # Start point
+        positions.append([
+            mission.origin.lat,
+            mission.origin.lon,
+            mission.origin.alt,
+            current_time
+        ])
+        velocities.append(mission.origin.speed)
+        timestamps.append(current_time)
+
+        # AI optimization: adjust waypoints based on learned weights
+        all_points = mission.waypoints + [mission.destination]
+        for i, waypoint in enumerate(all_points):
+            current_time += self._optimized_step_time(i, len(all_points))
+            optimized_pos = self._optimize_position(
+                waypoint.lat, waypoint.lon, waypoint.alt
+            )
+            positions.append([*optimized_pos, current_time])
+            velocities.append(self._optimized_speed(waypoint.speed))
+            timestamps.append(current_time)
+
+        trajectory = Trajectory(
+            positions=positions,
+            velocities=velocities,
+            timestamps=timestamps,
+            metadata={
+                "planner_version": "ai_v1",
+                "learned_weights": self.learned_weights,
+                "mission_type": mission.mission_type.value,
+                "optimized": True
+            }
+        )
+
+        self.mission_history.append({
+            "mission_type": mission.mission_type.value,
+            "waypoints": len(all_points)
+        })
+
+        return trajectory
+
+    def learn_from_score(self, score: int):
+        """Update weights based on validator score feedback."""
+        if score >= 90:
+            self.learned_weights["efficiency"] = min(
+                0.50, self.learned_weights["efficiency"] + 0.02
+            )
+        elif score < 70:
+            self.learned_weights["safety"] = min(
+                0.60, self.learned_weights["safety"] + 0.05
+            )
+
+    def _optimized_step_time(self, step: int, total: int) -> float:
+        """Calculate optimal time between waypoints."""
+        base = 4.0
+        efficiency_factor = self.learned_weights["efficiency"]
+        return round(base * (1 - efficiency_factor * 0.3), 2)
+
+    def _optimize_position(self, lat: float, lon: float,
+                            alt: float) -> list:
+        """Apply safety margin to altitude based on learned weights."""
+        safe_alt = max(alt, 30.0 * self.learned_weights["safety"])
+        return [lat, lon, safe_alt]
+
+    def _optimized_speed(self, base_speed: float) -> float:
+        """Optimize speed based on efficiency weight."""
+        return round(base_speed * (1 + self.learned_weights["efficiency"] * 0.2), 2)
