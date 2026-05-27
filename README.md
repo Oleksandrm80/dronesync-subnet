@@ -45,6 +45,17 @@ python -m miner.planner --wallet YOUR_WALLET --netuid 4 --network testnet
 python -m validator.scorer --wallet YOUR_WALLET --netuid 4 --network testnet
 
 ## Links
+## Demo Output
+
+$ python main.py
+🚀 DroneSync MVP starting...
+✅ trajectory created
+✅ environment simulation done
+✅ score computed: 96
+🎯 DroneSync run completed
+
+Pipeline: mission → trajectory → simulation → scoring → PoPW artifact
+Status: fully operational on local testnet environment
 
 - Konnex Testnet: https://subnets.testnet.konnex.world
 - Twitter: @OleksandrM80
