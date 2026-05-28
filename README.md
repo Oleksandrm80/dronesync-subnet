@@ -66,6 +66,14 @@ drone_0: status=CLEAR, collision_risks=0
 drone_1: status=CLEAR, collision_risks=0
 drone_2: status=CLEAR, collision_risks=0
 
+==================================================
+AI PLANNER - LEARNING MODE
+==================================================
+mission 1: score=96 | safety=0.4 efficiency=0.37
+mission 2: score=96 | safety=0.4 efficiency=0.39
+mission 3: score=96 | safety=0.4 efficiency=0.41
+AI planner trained on 3 missions
+
 DroneSync pipeline completed successfully
 PoPW artifact ready for on-chain submission
 - Konnex Testnet: https://subnets.testnet.konnex.world

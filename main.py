@@ -1,16 +1,16 @@
 from miner.planner import DronePlanner, AIPlanner
+from miner.citymap import CityMap
 from environment.sim import DroneEnvironment, SwarmEnvironment
 from validator.scorer import DroneEvaluator
 
 
 class FakeMission:
-    def __init__(self, origin=(0, 0), destination=(3, 3)):
+    def __init__(self, origin=(47.3769, 8.5417), destination=(47.3800, 8.5450)):
         self.origin = type("obj", (), {
             "lat": origin[0], "lon": origin[1], "alt": 50, "speed": 5
         })
         self.waypoints = [
-            type("obj", (), {"lat": 1, "lon": 1, "alt": 50, "speed": 5}),
-            type("obj", (), {"lat": 2, "lon": 2, "alt": 50, "speed": 5}),
+            type("obj", (), {"lat": 47.3780, "lon": 8.5430, "alt": 50, "speed": 5}),
         ]
         self.destination = type("obj", (), {
             "lat": destination[0], "lon": destination[1], "alt": 50, "speed": 5
@@ -40,9 +40,9 @@ def run_swarm():
     print("SWARM MISSION - 3 DRONES")
     print("=" * 50)
     missions = [
-        FakeMission(origin=(0, 0), destination=(3, 3)),
-        FakeMission(origin=(0, 1), destination=(3, 4)),
-        FakeMission(origin=(0, 2), destination=(3, 5)),
+        FakeMission(origin=(47.3769, 8.5417), destination=(47.3820, 8.5460)),
+        FakeMission(origin=(47.3775, 8.5420), destination=(47.3825, 8.5465)),
+        FakeMission(origin=(47.3780, 8.5425), destination=(47.3830, 8.5470)),
     ]
     planner = DronePlanner()
     trajectories = [planner.plan_trajectory(m) for m in missions]
@@ -63,7 +63,6 @@ def run_ai_planner():
     ai_planner = AIPlanner()
     validator = DroneEvaluator()
     env = DroneEnvironment()
-
     for i in range(3):
         mission = FakeMission()
         trajectory = ai_planner.plan_trajectory(mission)
@@ -74,8 +73,31 @@ def run_ai_planner():
         print("mission " + str(i+1) + ": score=" + str(score) +
               " | safety=" + str(round(weights["safety"], 2)) +
               " efficiency=" + str(round(weights["efficiency"], 2)))
-
     print("AI planner trained on 3 missions")
+    print()
+
+
+def run_city_map():
+    print("=" * 50)
+    print("CITY MAP - ZURICH URBAN AIRSPACE")
+    print("=" * 50)
+    city = CityMap(city="zurich")
+    stats = city.get_city_stats()
+    print("city: " + stats["city"])
+    print("no-fly zones: " + str(stats["no_fly_zones"]))
+    print("zone types: " + str(stats["zone_types"]))
+
+    test_points = [
+        (47.3769, 8.5417, "city center"),
+        (47.4647, 8.5492, "near airport"),
+        (47.3744, 8.5373, "near hospital"),
+    ]
+    print()
+    for lat, lon, name in test_points:
+        no_fly, reason = city.is_no_fly(lat, lon)
+        safe_alt = city.safe_altitude(lat, lon)
+        status = "NO-FLY: " + str(reason) if no_fly else "CLEAR"
+        print(name + ": " + status + " | safe_alt=" + str(safe_alt) + "m")
     print()
 
 
@@ -84,6 +106,7 @@ def run_demo():
     run_single_drone()
     run_swarm()
     run_ai_planner()
+    run_city_map()
     print("DroneSync pipeline completed successfully")
     print("PoPW artifact ready for on-chain submission")
 
