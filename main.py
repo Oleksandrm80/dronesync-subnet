@@ -2,10 +2,12 @@ from miner.planner import DronePlanner, AIPlanner
 from miner.citymap import CityMap
 from environment.sim import DroneEnvironment, SwarmEnvironment
 from validator.scorer import DroneEvaluator
+from dronesync.verifier import TEEAttestation, PoPWRecord
 
 
 class FakeMission:
     def __init__(self, origin=(47.3769, 8.5417), destination=(47.3800, 8.5450)):
+        self.mission_id = "DSYNC_" + str(int(__import__("time").time()))
         self.origin = type("obj", (), {
             "lat": origin[0], "lon": origin[1], "alt": 50, "speed": 5
         })
@@ -86,7 +88,6 @@ def run_city_map():
     print("city: " + stats["city"])
     print("no-fly zones: " + str(stats["no_fly_zones"]))
     print("zone types: " + str(stats["zone_types"]))
-
     test_points = [
         (47.3769, 8.5417, "city center"),
         (47.4647, 8.5492, "near airport"),
@@ -101,12 +102,44 @@ def run_city_map():
     print()
 
 
+def run_tee():
+    print("=" * 50)
+    print("TEE ATTESTATION - PoPW RECORD")
+    print("=" * 50)
+    mission = FakeMission()
+    planner = DronePlanner()
+    trajectory = planner.plan_trajectory(mission)
+    validator = DroneEvaluator()
+    env = DroneEnvironment()
+    sensor_data = env.run(trajectory)
+    score = validator.score(trajectory, sensor_data)
+
+    popw = PoPWRecord()
+    record = popw.create_record(
+        mission_id=mission.mission_id,
+        trajectory=trajectory,
+        score=score
+    )
+
+    print("mission_id: " + record["mission_id"])
+    print("score: " + str(record["score"]))
+    print("trajectory_hash: " + record["trajectory_hash"][:16] + "...")
+    print("attestation: " + record["attestation"]["attestation_id"])
+    print("tee_status: " + record["attestation"]["status"])
+    print("on_chain_ready: " + str(record["on_chain_ready"]))
+    print()
+    chain_str = popw.format_for_chain(record)
+    print("on-chain string: " + chain_str)
+    print()
+
+
 def run_demo():
     print("\nDroneSync MVP starting...\n")
     run_single_drone()
     run_swarm()
     run_ai_planner()
     run_city_map()
+    run_tee()
     print("DroneSync pipeline completed successfully")
     print("PoPW artifact ready for on-chain submission")
 
