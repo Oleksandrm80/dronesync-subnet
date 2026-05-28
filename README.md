@@ -56,7 +56,7 @@ SINGLE DRONE MISSION
 ==================================================
 trajectory created
 environment simulation done
-score computed: 96
+score computed: 97
 
 ==================================================
 SWARM MISSION - 3 DRONES
@@ -69,10 +69,20 @@ drone_2: status=CLEAR, collision_risks=0
 ==================================================
 AI PLANNER - LEARNING MODE
 ==================================================
-mission 1: score=96 | safety=0.4 efficiency=0.37
-mission 2: score=96 | safety=0.4 efficiency=0.39
-mission 3: score=96 | safety=0.4 efficiency=0.41
+mission 1: score=97 | safety=0.4 efficiency=0.37
+mission 2: score=97 | safety=0.4 efficiency=0.39
+mission 3: score=97 | safety=0.4 efficiency=0.41
 AI planner trained on 3 missions
+
+==================================================
+CITY MAP - ZURICH URBAN AIRSPACE
+==================================================
+city: zurich
+no-fly zones: 3
+zone types: ['hospital', 'airport', 'government']
+city center: NO-FLY: government | safe_alt=140m
+near airport: NO-FLY: airport | safe_alt=140m
+near hospital: NO-FLY: government | safe_alt=140m
 
 DroneSync pipeline completed successfully
 PoPW artifact ready for on-chain submission
