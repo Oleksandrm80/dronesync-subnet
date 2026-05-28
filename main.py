@@ -3,6 +3,8 @@ from miner.citymap import CityMap
 from environment.sim import DroneEnvironment, SwarmEnvironment
 from validator.scorer import DroneEvaluator
 from dronesync.verifier import TEEAttestation, PoPWRecord
+from dronesync.security import DroneSecuritySuite, CommandSigner
+from miner.weather import WeatherService, WeatherImpactAnalyzer
 
 
 class FakeMission:
@@ -113,26 +115,72 @@ def run_tee():
     env = DroneEnvironment()
     sensor_data = env.run(trajectory)
     score = validator.score(trajectory, sensor_data)
-
     popw = PoPWRecord()
     record = popw.create_record(
         mission_id=mission.mission_id,
         trajectory=trajectory,
         score=score
     )
-
     print("mission_id: " + record["mission_id"])
     print("score: " + str(record["score"]))
     print("trajectory_hash: " + record["trajectory_hash"][:16] + "...")
     print("attestation: " + record["attestation"]["attestation_id"])
     print("tee_status: " + record["attestation"]["status"])
     print("on_chain_ready: " + str(record["on_chain_ready"]))
-    print()
     chain_str = popw.format_for_chain(record)
     print("on-chain string: " + chain_str)
     print()
 
 
+def run_security():
+    print("=" * 50)
+    print("SECURITY SUITE - THREAT DETECTION")
+    print("=" * 50)
+    mission = FakeMission()
+    planner = DronePlanner()
+    trajectory = planner.plan_trajectory(mission)
+    env = DroneEnvironment()
+    sensor_data = env.run(trajectory)
+    validator = DroneEvaluator()
+    score = validator.score(trajectory, sensor_data)
+
+    security = DroneSecuritySuite()
+    result = security.full_security_check(trajectory, score)
+
+    print("overall_status: " + result["overall_status"])
+    print("gps_spoofing: " + result["gps_spoofing"])
+    print("hijacking: " + result["hijacking"])
+    print("threat_level: " + result["threat_level"])
+    print("mission_cleared: " + str(result["mission_cleared"]))
+
+    signer = CommandSigner()
+    cmd = {"action": "fly", "destination": "47.3800,8.5450", "priority": 1}
+    signed = signer.sign_command(cmd)
+    verified = signer.verify_command(signed)
+    print("command_signed: True")
+    print("command_verified: " + str(verified))
+    print()
+
+def run_weather():
+    print("=" * 50)
+    print("WEATHER MODULE - ZURICH CONDITIONS")
+    print("=" * 50)
+    weather_service = WeatherService(city="zurich")
+    weather = weather_service.get_current()
+    mission = FakeMission()
+    planner = DronePlanner()
+    trajectory = planner.plan_trajectory(mission)
+    analyzer = WeatherImpactAnalyzer()
+    impact = analyzer.analyze(weather, trajectory.positions)
+    print("flyable: " + str(impact["flyable"]))
+    print("severity: " + impact["severity"])
+    print("wind: " + str(impact["wind_speed_ms"]) + " m/s")
+    print("visibility: " + str(impact["visibility_m"]) + "m")
+    print("precipitation: " + impact["precipitation"])
+    print("speed_factor: " + str(impact["speed_factor"]))
+    print("energy_factor: " + str(impact["energy_factor"]))
+    print("recommendation: " + impact["recommendation"])
+    print()
 def run_demo():
     print("\nDroneSync MVP starting...\n")
     run_single_drone()
@@ -140,6 +188,8 @@ def run_demo():
     run_ai_planner()
     run_city_map()
     run_tee()
+    run_security()
+    run_weather()
     print("DroneSync pipeline completed successfully")
     print("PoPW artifact ready for on-chain submission")
 
