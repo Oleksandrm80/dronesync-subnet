@@ -87,13 +87,26 @@ near hospital: NO-FLY: government | safe_alt=140m
 ==================================================
 TEE ATTESTATION - PoPW RECORD
 ==================================================
-mission_id: DSYNC_1779947084
 score: 97
-trajectory_hash: 5715b1c456038145...
-attestation: ATT_000001
 tee_status: VERIFIED
 on_chain_ready: True
-on-chain string: POPW|DSYNC_...|5715b1c456038145|97|c9ff802707508be1
+
+==================================================
+SECURITY SUITE - THREAT DETECTION
+==================================================
+overall_status: SECURE
+gps_spoofing: CLEAN
+hijacking: NONE
+mission_cleared: True
+command_verified: True
+
+==================================================
+WEATHER MODULE - ZURICH CONDITIONS
+==================================================
+flyable: True
+severity: CLEAR
+wind: 2.6 m/s
+recommendation: FLY_NORMAL - conditions optimal
 
 DroneSync pipeline completed successfully
 PoPW artifact ready for on-chain submission
