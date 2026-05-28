@@ -79,10 +79,21 @@ CITY MAP - ZURICH URBAN AIRSPACE
 ==================================================
 city: zurich
 no-fly zones: 3
-zone types: ['hospital', 'airport', 'government']
+zone types: ['airport', 'hospital', 'government']
 city center: NO-FLY: government | safe_alt=140m
 near airport: NO-FLY: airport | safe_alt=140m
 near hospital: NO-FLY: government | safe_alt=140m
+
+==================================================
+TEE ATTESTATION - PoPW RECORD
+==================================================
+mission_id: DSYNC_1779947084
+score: 97
+trajectory_hash: 5715b1c456038145...
+attestation: ATT_000001
+tee_status: VERIFIED
+on_chain_ready: True
+on-chain string: POPW|DSYNC_...|5715b1c456038145|97|c9ff802707508be1
 
 DroneSync pipeline completed successfully
 PoPW artifact ready for on-chain submission
