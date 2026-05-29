@@ -1,3 +1,5 @@
+from dronesync.threat_defense import ThreatDefense
+from dronesync.node import KonnexNode
 from environment.obstacles import DynamicObstacleManager
 from dronesync.mission_history import MissionHistory
 from miner.planner import DronePlanner, AIPlanner
@@ -246,9 +248,39 @@ def run_obstacles():
             print("  conflict: " + c["obstacle_id"] +
                   " type=" + c["type"] +
                   " dist=" + str(c["distance_m"]) + "m")
+def run_threat_defense():
+    print("=" * 50)
+    print("THREAT DEFENSE - REAL ATTACK VECTORS")
+    print("=" * 50)
+    mission = FakeMission()
+    planner = DronePlanner()
+    trajectory = planner.plan_trajectory(mission)
+    defense = ThreatDefense()
+    result = defense.full_threat_assessment(
+        trajectory.positions,
+        signal_strength=0.92
+    )
+    print("overall_threat_level: " + result["overall_threat_level"])
+    print("gps_status: " + result["gps_status"])
+    print("jamming_status: " + result["jamming_status"])
+    print("swarm_integrity: " + result["swarm_integrity"])
+    print("mission_safe: " + str(result["mission_safe"]))
+    print("total_threats: " + str(result["total_threats"]))
+    node = KonnexNode(
+        wallet_address="0x5a4E...51f2",
+        network="testnet"
+    )
+    node.connect()
+    status = node.get_status()
+    print()
+    print("node_connected: " + str(status["connected"]))
+    print("network: " + status["network"])
+    print("session_id: " + str(status["session_id"]))
+    print()
     print()
 def run_demo():
     print("\nDroneSync MVP starting...\n")
+    run_threat_defense()
     run_single_drone()
     run_swarm()
     run_ai_planner()
