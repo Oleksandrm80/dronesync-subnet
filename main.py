@@ -1,3 +1,4 @@
+from dronesync.mission_history import MissionHistory
 from miner.planner import DronePlanner, AIPlanner
 from miner.citymap import CityMap
 from environment.sim import DroneEnvironment, SwarmEnvironment
@@ -201,6 +202,31 @@ def run_energy():
     optimal = optimizer.optimal_speed(wind_ms=3.0)
     print("optimal_speed_ms: " + str(optimal))
     print()
+def run_history():
+    print("=" * 50)
+    print("MISSION HISTORY & STATISTICS")
+    print("=" * 50)
+    history = MissionHistory()
+    for i in range(5):
+        history.add(
+            mission_id="DSYNC_" + str(1780000000 + i),
+            score=97 - i,
+            duration_s=25.0 + i,
+            battery_used=7.0 + i * 0.5,
+            weather="CLEAR",
+            security="SECURE"
+        )
+    stats = history.stats()
+    print("total_missions: " + str(stats["total_missions"]))
+    print("avg_score: " + str(stats["avg_score"]))
+    print("max_score: " + str(stats["max_score"]))
+    print("success_rate: " + str(stats["success_rate_pct"]) + "%")
+    print()
+    print("last 3 missions:")
+    for m in history.last(3):
+        print("  " + m["mission_id"] + " | score=" + str(m["score"]) +
+              " | battery=" + str(m["battery_used_pct"]) + "%")
+    print()
 def run_demo():
     print("\nDroneSync MVP starting...\n")
     run_single_drone()
@@ -211,6 +237,7 @@ def run_demo():
     run_security()
     run_weather()
     run_energy()
+    run_history()
     print("DroneSync pipeline completed successfully")
     print("PoPW artifact ready for on-chain submission")
 
