@@ -1,3 +1,4 @@
+from environment.obstacles import DynamicObstacleManager
 from dronesync.mission_history import MissionHistory
 from miner.planner import DronePlanner, AIPlanner
 from miner.citymap import CityMap
@@ -227,6 +228,25 @@ def run_history():
         print("  " + m["mission_id"] + " | score=" + str(m["score"]) +
               " | battery=" + str(m["battery_used_pct"]) + "%")
     print()
+def run_obstacles():
+    print("=" * 50)
+    print("DYNAMIC OBSTACLES - URBAN AIRSPACE")
+    print("=" * 50)
+    mission = FakeMission()
+    planner = DronePlanner()
+    trajectory = planner.plan_trajectory(mission)
+    manager = DynamicObstacleManager()
+    result = manager.check_trajectory(trajectory.positions)
+    print("obstacles_tracked: " + str(result["obstacles_tracked"]))
+    print("conflicts_found: " + str(result["conflicts_found"]))
+    print("trajectory_safe: " + str(result["trajectory_safe"]))
+    print("recommendation: " + result["recommendation"])
+    if result["conflicts"]:
+        for c in result["conflicts"]:
+            print("  conflict: " + c["obstacle_id"] +
+                  " type=" + c["type"] +
+                  " dist=" + str(c["distance_m"]) + "m")
+    print()
 def run_demo():
     print("\nDroneSync MVP starting...\n")
     run_single_drone()
@@ -238,6 +258,7 @@ def run_demo():
     run_weather()
     run_energy()
     run_history()
+    run_obstacles()
     print("DroneSync pipeline completed successfully")
     print("PoPW artifact ready for on-chain submission")
 
