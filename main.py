@@ -5,6 +5,7 @@ from validator.scorer import DroneEvaluator
 from dronesync.verifier import TEEAttestation, PoPWRecord
 from dronesync.security import DroneSecuritySuite, CommandSigner
 from miner.weather import WeatherService, WeatherImpactAnalyzer
+from miner.energy import EnergyOptimizer, BatteryModel
 
 
 class FakeMission:
@@ -181,6 +182,25 @@ def run_weather():
     print("energy_factor: " + str(impact["energy_factor"]))
     print("recommendation: " + impact["recommendation"])
     print()
+def run_energy():
+    print("=" * 50)
+    print("ENERGY OPTIMIZER")
+    print("=" * 50)
+    mission = FakeMission()
+    planner = DronePlanner()
+    trajectory = planner.plan_trajectory(mission)
+    battery = BatteryModel(capacity_wh=100.0, payload_kg=0.5)
+    optimizer = EnergyOptimizer(battery=battery)
+    result = optimizer.analyze_trajectory(trajectory.positions, wind_ms=3.0)
+    print("total_distance_km: " + str(result["total_distance_km"]))
+    print("battery_used_pct: " + str(result["battery_used_pct"]) + "%")
+    print("battery_remaining_pct: " + str(result["battery_remaining_pct"]) + "%")
+    print("efficiency_rating: " + result["efficiency_rating"])
+    print("mission_feasible: " + str(result["mission_feasible"]))
+    print("recommendation: " + result["recommendation"])
+    optimal = optimizer.optimal_speed(wind_ms=3.0)
+    print("optimal_speed_ms: " + str(optimal))
+    print()
 def run_demo():
     print("\nDroneSync MVP starting...\n")
     run_single_drone()
@@ -190,6 +210,7 @@ def run_demo():
     run_tee()
     run_security()
     run_weather()
+    run_energy()
     print("DroneSync pipeline completed successfully")
     print("PoPW artifact ready for on-chain submission")
 
