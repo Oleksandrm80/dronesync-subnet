@@ -79,7 +79,7 @@ CITY MAP - ZURICH URBAN AIRSPACE
 ==================================================
 city: zurich
 no-fly zones: 3
-zone types: ['airport', 'hospital', 'government']
+zone types: ['hospital', 'government', 'airport']
 city center: NO-FLY: government | safe_alt=140m
 near airport: NO-FLY: airport | safe_alt=140m
 near hospital: NO-FLY: government | safe_alt=140m
@@ -87,9 +87,13 @@ near hospital: NO-FLY: government | safe_alt=140m
 ==================================================
 TEE ATTESTATION - PoPW RECORD
 ==================================================
+mission_id: DSYNC_1780031201
 score: 97
+trajectory_hash: 30e3e7f3e85c71e1...
+attestation: ATT_000001
 tee_status: VERIFIED
 on_chain_ready: True
+on-chain string: POPW|DSYNC_...|30e3e7f3e85c71e1|97|4a5d96d7ae6d8bea
 
 ==================================================
 SECURITY SUITE - THREAT DETECTION
@@ -105,10 +109,19 @@ WEATHER MODULE - ZURICH CONDITIONS
 ==================================================
 flyable: True
 severity: CLEAR
-wind: 2.6 m/s
+wind: 3.3 m/s
 recommendation: FLY_NORMAL - conditions optimal
+
+==================================================
+ENERGY OPTIMIZER
+==================================================
+total_distance_km: 0.425
+battery_used_pct: 7.0%
+battery_remaining_pct: 93.0%
+efficiency_rating: EXCELLENT
+mission_feasible: True
+recommendation: GO - sufficient battery for mission
+optimal_speed_ms: 10.0
 
 DroneSync pipeline completed successfully
 PoPW artifact ready for on-chain submission
-- Konnex Testnet: https://subnets.testnet.konnex.world
-- Twitter: @OleksandrM80
