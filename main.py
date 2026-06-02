@@ -6,6 +6,7 @@ from miner.planner import DronePlanner, AIPlanner
 from miner.citymap import CityMap
 from environment.sim import DroneEnvironment, SwarmEnvironment
 from validator.scorer import DroneEvaluator
+from validator.scoreroot import ScoreRoot
 from dronesync.verifier import TEEAttestation, PoPWRecord
 from dronesync.security import DroneSecuritySuite, CommandSigner
 from miner.weather import WeatherService, WeatherImpactAnalyzer
@@ -461,6 +462,29 @@ def run_storage():
     print()
 
 
+def run_scoreroot():
+    print("=" * 50)
+    print("SCORE ROOT - VALIDATOR COMMITMENT")
+    print("=" * 50)
+    sr = ScoreRoot(validator_id="VALIDATOR_001")
+    missions = [
+        ("DSYNC_001", 97, "abc123", "def456"),
+        ("DSYNC_002", 94, "bcd234", "efg567"),
+        ("DSYNC_003", 91, "cde345", "fgh678"),
+    ]
+    for mid, score, th, sh in missions:
+        sr.add_score(mid, score, th, sh)
+    commitment = sr.commit()
+    print("validator_id: " + sr.validator_id)
+    print("scores_count: " + str(commitment["scores_count"]))
+    print("score_root: " + commitment["score_root"][:16] + "...")
+    print("on_chain_ready: " + str(commitment["on_chain_ready"]))
+    verify = sr.verify_score("DSYNC_002")
+    print("verify DSYNC_002: " + str(verify["verified"]) +
+          " | score=" + str(verify["score"]))
+    print()
+
+
 def run_demo():
     print("\nDroneSync MVP starting...\n")
     run_threat_defense()
@@ -481,6 +505,7 @@ def run_demo():
     run_swarm_consensus()
     run_emergency()
     run_storage()
+    run_scoreroot()
     print("DroneSync pipeline completed successfully")
     print("PoPW artifact ready for on-chain submission")
 
