@@ -87,3 +87,23 @@ def test_emergency_on_chain_ready():
     eo = EmergencyOverride()
     status = eo.get_status()
     assert status["on_chain_ready"] is True
+
+def test_medical_delivery_protected_from_override():
+    eo = EmergencyOverride()
+    em = eo.broadcast_emergency('ACCIDENT', {'lat': 47.3780, 'lon': 8.5430}, 'AUTH_001')
+    result = eo.check_drone_override([47.3782, 8.5432, 50.0], em, mission_type='medical_delivery')
+    assert result['override'] is False
+    assert result['reason'] == 'mission_priority_protected'
+
+def test_fire_overrides_commercial_delivery():
+    eo = EmergencyOverride()
+    em = eo.broadcast_emergency('FIRE', {'lat': 47.3780, 'lon': 8.5430}, 'AUTH_001')
+    result = eo.check_drone_override([47.3782, 8.5432, 50.0], em, mission_type='urban_delivery')
+    assert result['override'] is True
+
+def test_protected_drones_counted():
+    eo = EmergencyOverride()
+    em = eo.broadcast_emergency('ACCIDENT', {'lat': 47.3780, 'lon': 8.5430}, 'AUTH_001')
+    eo.check_drone_override([47.3782, 8.5432, 50.0], em, mission_type='medical_delivery')
+    assert eo.get_status()['protected_drones'] == 1
+

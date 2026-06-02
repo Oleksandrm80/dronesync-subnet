@@ -420,13 +420,17 @@ def run_emergency():
     print("action: " + emergency["action"])
     print("radius_m: " + str(emergency["radius_m"]))
     drone_pos = [47.3782, 8.5432, 50.0]
-    check = override.check_drone_override(drone_pos, emergency)
-    print("drone_override: " + str(check["override"]))
-    if check["override"]:
-        print("redirect_action: " + check["action"])
-        print("distance_to_emergency_m: " + str(check["distance_to_emergency_m"]))
+    check1 = override.check_drone_override(drone_pos, emergency, mission_type="urban_delivery")
+    print("urban_delivery: override=" + str(check1["override"]) + " (FIRE priority=10 > mission priority=3)")
+    check2 = override.check_drone_override(drone_pos, emergency, mission_type="medical_delivery")
+    print("medical_delivery: override=" + str(check2["override"]) + " (FIRE priority=10 > medical priority=9)")
+    # ACCIDENT (priority=8) не перехватит медицинский дрон
+    accident = override.broadcast_emergency("ACCIDENT", {"lat": 47.3780, "lon": 8.5430}, "AUTH_002")
+    check3 = override.check_drone_override(drone_pos, accident, mission_type="medical_delivery")
+    print("medical vs ACCIDENT: override=" + str(check3["override"]) + " (ACCIDENT priority=8 < medical priority=9 -> PROTECTED)")
     status = override.get_status()
     print("redirected_drones: " + str(status["redirected_drones"]))
+    print("protected_drones: " + str(status["protected_drones"]))
     print("on_chain_ready: " + str(status["on_chain_ready"]))
     print()
 

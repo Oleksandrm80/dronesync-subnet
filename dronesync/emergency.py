@@ -14,23 +14,31 @@ EMERGENCY_TYPES = {
     "HAZMAT": {"priority": 10, "action": "EVACUATE_ZONE", "radius_m": 800},
 }
 
+# Mission priorities — higher = more protected from override
+MISSION_PRIORITIES = {
+    "medical_delivery": 9,    # medical supplies — only FIRE/HAZMAT can override
+    "search_rescue": 9,       # already doing rescue — not redirected
+    "urban_delivery": 3,      # commercial delivery — easily redirected
+    "patrol": 2,              # patrol — easily redirected
+    "surveillance": 2,
+    "inspection": 3,
+}
+
 
 class EmergencyOverride:
     """
     Emergency override protocol for drone swarms.
-    Verified emergency signal from city services redirects drones automatically.
+    Respects mission priority — critical missions are protected from override.
+    Emergency priority must exceed mission priority to redirect the drone.
     """
 
     def __init__(self):
         self.active_emergencies = []
         self.redirected_drones = []
+        self.protected_drones = []
 
     def broadcast_emergency(self, emergency_type: str, location: dict,
                              authority_id: str) -> dict:
-        """
-        Broadcast emergency signal to all drones in radius.
-        Only verified authority IDs accepted.
-        """
         if emergency_type not in EMERGENCY_TYPES:
             return {"status": "REJECTED", "reason": "unknown_emergency_type"}
 
@@ -52,10 +60,11 @@ class EmergencyOverride:
         return emergency
 
     def check_drone_override(self, drone_position: list,
-                              emergency: dict) -> dict:
+                              emergency: dict,
+                              mission_type: str = "urban_delivery") -> dict:
         """
-        Check if drone at position should be redirected.
-        Returns override instruction if drone is in emergency radius.
+        Check if drone should be redirected.
+        If emergency priority <= mission priority — drone is protected.
         """
         import math
         elat = emergency["location"]["lat"]
@@ -68,21 +77,42 @@ class EmergencyOverride:
              math.sin(dlon/2)**2)
         dist = 6371000 * 2 * math.atan2(math.sqrt(a), math.sqrt(1-a))
 
-        if dist <= emergency["radius_m"]:
-            self.redirected_drones.append({
+        if dist > emergency["radius_m"]:
+            return {"override": False, "reason": "outside_radius"}
+
+        mission_priority = MISSION_PRIORITIES.get(mission_type, 3)
+        emergency_priority = emergency["priority"]
+
+        if emergency_priority <= mission_priority:
+            self.protected_drones.append({
                 "position": drone_position[:2],
-                "emergency_id": emergency["emergency_id"],
-                "distance_m": round(dist, 1),
+                "mission_type": mission_type,
+                "mission_priority": mission_priority,
+                "emergency_priority": emergency_priority,
                 "timestamp": int(time.time())
             })
             return {
-                "override": True,
-                "action": emergency["action"],
-                "emergency_id": emergency["emergency_id"],
-                "distance_to_emergency_m": round(dist, 1),
-                "priority": emergency["priority"]
+                "override": False,
+                "reason": "mission_priority_protected",
+                "mission_type": mission_type,
+                "mission_priority": mission_priority,
+                "emergency_priority": emergency_priority
             }
-        return {"override": False}
+
+        self.redirected_drones.append({
+            "position": drone_position[:2],
+            "emergency_id": emergency["emergency_id"],
+            "distance_m": round(dist, 1),
+            "timestamp": int(time.time())
+        })
+        return {
+            "override": True,
+            "action": emergency["action"],
+            "emergency_id": emergency["emergency_id"],
+            "distance_to_emergency_m": round(dist, 1),
+            "priority": emergency_priority,
+            "mission_type": mission_type
+        }
 
     def get_status(self) -> dict:
         status_hash = hashlib.sha256(
@@ -91,6 +121,8 @@ class EmergencyOverride:
         return {
             "active_emergencies": len(self.active_emergencies),
             "redirected_drones": len(self.redirected_drones),
+            "protected_drones": len(self.protected_drones),
             "status_hash": status_hash,
             "on_chain_ready": True
         }
+
