@@ -13,6 +13,9 @@ from miner.energy import EnergyOptimizer, BatteryModel
 from dronesync.reputation import DroneReputation
 from dronesync.firewall import DroneFirewall
 from dronesync.last_will import DroneLastWill
+from dronesync.memory import DroneMemory
+from dronesync.swarm_consensus import SwarmConsensus
+from dronesync.emergency import EmergencyOverride
 
 
 class FakeMission:
@@ -362,6 +365,72 @@ def run_last_will():
     print()
 
 
+def run_memory():
+    print("=" * 50)
+    print("DRONE MEMORY - FLIGHT EXPERIENCE")
+    print("=" * 50)
+    mission = FakeMission()
+    planner = DronePlanner()
+    trajectory = planner.plan_trajectory(mission)
+    mem = DroneMemory(drone_id="DRONE_001")
+    for i in range(5):
+        mem.record_flight(trajectory.positions, duration_s=120.0, wind_ms=3.0)
+    record = mem.get_memory_record()
+    print("drone_id: " + record["drone_id"])
+    print("missions_completed: " + str(record["missions_completed"]))
+    print("total_flight_hours: " + str(record["total_flight_hours"]))
+    print("asset_value: " + record["asset_value"])
+    print("on_chain_ready: " + str(record["on_chain_ready"]))
+    print()
+
+
+def run_swarm_consensus():
+    print("=" * 50)
+    print("SWARM CONSENSUS - DECENTRALIZED VOTING")
+    print("=" * 50)
+    drones = ["drone_0", "drone_1", "drone_2", "drone_3", "drone_4"]
+    consensus = SwarmConsensus(drone_ids=drones)
+    votes = [(d, True) for d in drones[:4]] + [("drone_4", False)]
+    result = consensus.vote_on_route("DSYNC_001", votes)
+    print("mission_id: DSYNC_001")
+    print("approvals: " + str(result["approvals"]) + "/" + str(result["total_voters"]))
+    print("approval_rate: " + str(result["approval_rate"]))
+    print("route_status: " + result["status"])
+    bl_votes = [(d, True) for d in ["drone_0", "drone_1", "drone_2"]] + [("drone_3", False)]
+    bl_result = consensus.vote_blacklist("drone_4", bl_votes)
+    print("blacklist_vote: drone_4 -> " + bl_result["status"])
+    status = consensus.get_swarm_status()
+    print("active_drones: " + str(status["active_drones"]) + "/" + str(status["total_drones"]))
+    print("on_chain_ready: " + str(status["on_chain_ready"]))
+    print()
+
+
+def run_emergency():
+    print("=" * 50)
+    print("EMERGENCY OVERRIDE PROTOCOL")
+    print("=" * 50)
+    override = EmergencyOverride()
+    emergency = override.broadcast_emergency(
+        emergency_type="FIRE",
+        location={"lat": 47.3780, "lon": 8.5430},
+        authority_id="ZURICH_FIRE_DEPT_001"
+    )
+    print("emergency_id: " + emergency["emergency_id"])
+    print("type: " + emergency["type"])
+    print("action: " + emergency["action"])
+    print("radius_m: " + str(emergency["radius_m"]))
+    drone_pos = [47.3782, 8.5432, 50.0]
+    check = override.check_drone_override(drone_pos, emergency)
+    print("drone_override: " + str(check["override"]))
+    if check["override"]:
+        print("redirect_action: " + check["action"])
+        print("distance_to_emergency_m: " + str(check["distance_to_emergency_m"]))
+    status = override.get_status()
+    print("redirected_drones: " + str(status["redirected_drones"]))
+    print("on_chain_ready: " + str(status["on_chain_ready"]))
+    print()
+
+
 def run_demo():
     print("\nDroneSync MVP starting...\n")
     run_threat_defense()
@@ -378,6 +447,9 @@ def run_demo():
     run_reputation()
     run_firewall()
     run_last_will()
+    run_memory()
+    run_swarm_consensus()
+    run_emergency()
     print("DroneSync pipeline completed successfully")
     print("PoPW artifact ready for on-chain submission")
 
