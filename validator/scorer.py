@@ -95,10 +95,6 @@ class MissionScorer:
         return max(0.0, 1.0 - min(1.0, (avg_gps - 5) * 0.05))
 class DroneEvaluator(MissionScorer):
     def score(self, trajectory, sensor_data):
-        # упрощённая адаптация под MVP pipeline
-        mission = trajectory.metadata.get("mission_ref", None)
-
-        # fallback безопасный режим
         return 100 - len(trajectory.positions)
 
     def generate_pow(self, trajectory, steps):
@@ -107,3 +103,40 @@ class DroneEvaluator(MissionScorer):
             "steps": steps,
             "valid": True
         }
+
+    def replay_validate(self, trajectory) -> dict:
+        """
+        Replay Validation: validator повторяет расчёт хэша шагов
+        и сравнивает с тем что записал планировщик.
+        VERIFIED если совпало, REJECTED если нет.
+        """
+        import hashlib
+        planner_steps = trajectory.metadata.get("planner_steps")
+        recorded_hash = trajectory.metadata.get("steps_hash")
+
+        if not planner_steps or not recorded_hash:
+            return {
+                "status": "REJECTED",
+                "reason": "no planner_steps in trace",
+                "verified": False
+            }
+
+        # Повторяем расчёт хэша
+        recomputed_hash = hashlib.sha256(str(planner_steps).encode()).hexdigest()
+
+        if recomputed_hash == recorded_hash:
+            return {
+                "status": "VERIFIED",
+                "reason": "trace hash matches",
+                "verified": True,
+                "steps_count": len(planner_steps),
+                "hash": recorded_hash
+            }
+        else:
+            return {
+                "status": "REJECTED",
+                "reason": "trace hash mismatch",
+                "verified": False,
+                "recorded_hash": recorded_hash,
+                "recomputed_hash": recomputed_hash
+            }

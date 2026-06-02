@@ -35,12 +35,21 @@ def run_single_drone():
     planner = DronePlanner()
     trajectory = planner.plan_trajectory(mission)
     print("trajectory created")
+    steps = trajectory.metadata.get("planner_steps", [])
+    print("planner_steps: " + str(len(steps)))
+    for s in steps:
+        print("  step " + str(s["step"]) + ": " + s["action"] +
+              " lat=" + str(s["lat"]) + " lon=" + str(s["lon"]))
     env = DroneEnvironment()
     sensor_data = env.run(trajectory)
     print("environment simulation done")
     validator = DroneEvaluator()
     score = validator.score(trajectory, sensor_data)
     print("score computed:", score)
+    replay = validator.replay_validate(trajectory)
+    print("replay_validation: " + replay["status"] +
+          " | steps=" + str(replay.get("steps_count", 0)) +
+          " | " + replay["reason"])
     print()
 
 

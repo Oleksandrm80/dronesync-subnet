@@ -28,31 +28,54 @@ class DronePlanner:
         Основная функция: строит траекторию для миссии
         """
         self.computation_steps = 0
-        
+        planner_steps = []
+
         positions = []
         velocities = []
         timestamps = []
-        
+
         # Начальная точка
         current_time = int(time.time())
         positions.append([mission.origin.lat, mission.origin.lon, mission.origin.alt, current_time])
         velocities.append(mission.origin.speed)
         timestamps.append(current_time)
-        
+        planner_steps.append({
+            "step": 0,
+            "action": "origin",
+            "lat": mission.origin.lat,
+            "lon": mission.origin.lon,
+            "alt": mission.origin.alt,
+            "timestamp": current_time
+        })
+
         # Простой алгоритм: идём через waypoints + конечную точку
         all_points = mission.waypoints + [mission.destination]
-        
-        for waypoint in all_points:
+
+        for i, waypoint in enumerate(all_points):
             self.computation_steps += 1
             current_time += 5  # 5 секунд между точками (симуляция)
-            
+
             positions.append([waypoint.lat, waypoint.lon, waypoint.alt, current_time])
             velocities.append(waypoint.speed)
             timestamps.append(current_time)
-            
-            # Симулируем sensor data
-            self.computation_steps += 10  # условные вычисления
-        
+
+            action = "destination" if i == len(all_points) - 1 else "waypoint"
+            planner_steps.append({
+                "step": i + 1,
+                "action": action,
+                "lat": waypoint.lat,
+                "lon": waypoint.lon,
+                "alt": waypoint.alt,
+                "timestamp": current_time
+            })
+
+            # Симулируем вычисления
+            self.computation_steps += 10
+
+        # Хэш шагов для replay validation
+        steps_data = str(planner_steps).encode()
+        steps_hash = hashlib.sha256(steps_data).hexdigest()
+
         # Создаём Trajectory
         trajectory = Trajectory(
             positions=positions,
@@ -61,10 +84,12 @@ class DronePlanner:
             metadata={
                 "planner_version": "0.1",
                 "total_waypoints": len(all_points),
-                "mission_type": mission.mission_type.value
+                "mission_type": mission.mission_type.value,
+                "planner_steps": planner_steps,
+                "steps_hash": steps_hash
             }
         )
-        
+
         return trajectory
 
     def generate_sensor_data(self, trajectory: Trajectory) -> SensorData:
