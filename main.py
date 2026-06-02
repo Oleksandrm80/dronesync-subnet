@@ -10,6 +10,9 @@ from dronesync.verifier import TEEAttestation, PoPWRecord
 from dronesync.security import DroneSecuritySuite, CommandSigner
 from miner.weather import WeatherService, WeatherImpactAnalyzer
 from miner.energy import EnergyOptimizer, BatteryModel
+from dronesync.reputation import DroneReputation
+from dronesync.firewall import DroneFirewall
+from dronesync.last_will import DroneLastWill
 
 
 class FakeMission:
@@ -290,6 +293,75 @@ def run_threat_defense():
     print("session_id: " + str(status["session_id"]))
     print()
     print()
+def run_reputation():
+    print("=" * 50)
+    print("DRONE REPUTATION SCORE")
+    print("=" * 50)
+    rep = DroneReputation(drone_id="DRONE_001")
+    missions = [
+        ("DSYNC_001", 97, True, 7.0),
+        ("DSYNC_002", 95, True, 7.5),
+        ("DSYNC_003", 92, True, 8.0),
+        ("DSYNC_004", 55, False, 45.0),
+        ("DSYNC_005", 98, True, 6.5),
+    ]
+    for mission_id, score, safe, battery in missions:
+        rep.record_mission(mission_id, score, safe, battery)
+    status = rep.get_status()
+    print("drone_id: " + status["drone_id"])
+    print("reputation_score: " + str(status["reputation_score"]))
+    print("tier: " + status["tier"])
+    print("total_missions: " + str(status["total_missions"]))
+    print("on_chain_ready: " + str(status["on_chain_ready"]))
+    print()
+
+
+def run_firewall():
+    print("=" * 50)
+    print("DRONE FIREWALL - COMMAND FILTER")
+    print("=" * 50)
+    fw = DroneFirewall(drone_id="DRONE_001")
+    import time
+    now = int(time.time())
+    commands = [
+        {"action": "fly", "source": "operator", "timestamp": now, "signature": "abc123"},
+        {"action": "fly", "source": "operator", "timestamp": now},
+        {"action": "hack", "source": "unknown", "timestamp": now, "signature": "xyz"},
+        {"action": "land", "source": "operator", "timestamp": now - 60, "signature": "abc123"},
+        {"action": "hover", "source": "operator", "timestamp": now, "signature": "def456"},
+    ]
+    for cmd in commands:
+        result = fw.filter(cmd)
+        print("action=" + cmd["action"] + " → " + result["status"] +
+              (" | reason=" + result["reason"] if result["status"] == "BLOCKED" else ""))
+    report = fw.get_report()
+    print("total_allowed: " + str(report["total_allowed"]))
+    print("total_blocked: " + str(report["total_blocked"]))
+    print("on_chain_ready: " + str(report["on_chain_ready"]))
+    print()
+
+
+def run_last_will():
+    print("=" * 50)
+    print("DRONE LAST WILL - EMERGENCY PoPW")
+    print("=" * 50)
+    mission = FakeMission()
+    planner = DronePlanner()
+    trajectory = planner.plan_trajectory(mission)
+    last_will = DroneLastWill(drone_id="DRONE_001")
+    record = last_will.simulate_crash(trajectory.positions, mission.mission_id)
+    print("type: " + record["type"])
+    print("drone_id: " + record["drone_id"])
+    print("failure_cause: " + record["failure_cause"])
+    print("battery_pct: " + str(record["battery_pct"]) + "%")
+    print("last_position: lat=" + str(record["last_position"]["lat"]) +
+          " lon=" + str(record["last_position"]["lon"]))
+    print("will_hash: " + record["will_hash"][:16] + "...")
+    print("insurance_claim_ready: " + str(record["insurance_claim_ready"]))
+    print("on_chain_ready: " + str(record["on_chain_ready"]))
+    print()
+
+
 def run_demo():
     print("\nDroneSync MVP starting...\n")
     run_threat_defense()
@@ -303,6 +375,9 @@ def run_demo():
     run_energy()
     run_history()
     run_obstacles()
+    run_reputation()
+    run_firewall()
+    run_last_will()
     print("DroneSync pipeline completed successfully")
     print("PoPW artifact ready for on-chain submission")
 
