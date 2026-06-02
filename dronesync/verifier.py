@@ -44,6 +44,7 @@ class TEEAttestation:
         return {
             "attestation_id": "ATT_" + str(self.attestation_count).zfill(6),
             "mission_id": mission_id,
+            "trajectory_hash": trajectory_hash,
             "score": score,
             "timestamp": timestamp,
             "tee_version": self.TEE_VERSION,
@@ -56,14 +57,14 @@ class TEEAttestation:
         """Verify that attestation has not been tampered with."""
         payload = {
             "mission_id": attestation["mission_id"],
-            "trajectory_hash": "",
+            "trajectory_hash": attestation.get("trajectory_hash", ""),
             "score": attestation["score"],
             "timestamp": attestation["timestamp"],
             "tee_version": attestation["tee_version"],
             "hardware_id": attestation["hardware_id"]
         }
         expected_hash = self._sign_payload(payload)
-        return attestation["attestation_hash"][:16] == expected_hash[:16]
+        return attestation["attestation_hash"] == expected_hash
 
     def _sign_payload(self, payload: dict) -> str:
         """Generate cryptographic hash of payload."""

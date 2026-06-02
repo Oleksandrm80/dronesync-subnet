@@ -1,7 +1,7 @@
-konnex-sdk
 numpy
 scipy
 pyyaml
 requests
 websockets
 pytest
+pydantic>=2.0

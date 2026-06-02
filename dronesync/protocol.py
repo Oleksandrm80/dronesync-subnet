@@ -88,19 +88,23 @@ class PoPWArtifact:
     constraints_satisfied: bool
 
 
-# Bittensor Synapse - основной класс для общения между miner и validator
-from pydantic import Field
-
-
 class DroneSyncSynapse:
-    """MVP placeholder - no bittensor dependency"""
-    pass
-    mission: MissionInstruction
-    trajectory: Optional[Trajectory] = None
-    sensor_data: Optional[SensorData] = None
-    pow_artifact: Optional[PoPWArtifact] = None
-    score: Optional[float] = None
-    metadata: Dict = Field(default_factory=dict)
+    """
+    Synapse for miner-validator communication.
+    In production: inherits from bittensor.Synapse.
+    """
 
-    class Config:
-        arbitrary_types_allowed = True
+    def __init__(self, mission: "MissionInstruction" = None):
+        self.mission = mission
+        self.trajectory: Optional[Trajectory] = None
+        self.sensor_data: Optional[SensorData] = None
+        self.pow_artifact: Optional[PoPWArtifact] = None
+        self.score: Optional[float] = None
+        self.metadata: Dict = {}
+
+    def to_dict(self) -> dict:
+        return {
+            "mission_id": self.mission.mission_id if self.mission else None,
+            "score": self.score,
+            "metadata": self.metadata,
+        }
