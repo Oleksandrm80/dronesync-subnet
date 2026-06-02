@@ -18,6 +18,7 @@ from dronesync.memory import DroneMemory
 from dronesync.swarm_consensus import SwarmConsensus
 from dronesync.emergency import EmergencyOverride
 from dronesync.storage import DroneStorage
+from dronesync.sensor_bundle import SensorBundle
 
 
 class FakeMission:
@@ -462,6 +463,33 @@ def run_storage():
     print()
 
 
+def run_sensor_bundle():
+    print("=" * 50)
+    print("SENSOR BUNDLE - EVIDENCE PACKAGE")
+    print("=" * 50)
+    mission = FakeMission()
+    planner = DronePlanner()
+    trajectory = planner.plan_trajectory(mission)
+    env = DroneEnvironment()
+    sensor_data = env.run(trajectory)
+    popw = PoPWRecord()
+    record = popw.create_record(mission.mission_id, trajectory, 97)
+    bundle = SensorBundle().pack(
+        mission_id=mission.mission_id,
+        trajectory=trajectory,
+        sensor_data=sensor_data,
+        popw_record=record
+    )
+    verify = SensorBundle().verify(bundle)
+    print("mission_id: " + bundle["mission_id"])
+    print("sensor_hash: " + bundle["sensor_hash"][:16] + "...")
+    print("bundle_hash: " + bundle["bundle_hash"][:16] + "...")
+    print("tee_status: " + bundle["popw"]["tee_status"])
+    print("bundle_valid: " + str(verify["valid"]))
+    print("on_chain_ready: " + str(bundle["on_chain_ready"]))
+    print()
+
+
 def run_scoreroot():
     print("=" * 50)
     print("SCORE ROOT - VALIDATOR COMMITMENT")
@@ -506,6 +534,7 @@ def run_demo():
     run_emergency()
     run_storage()
     run_scoreroot()
+    run_sensor_bundle()
     print("DroneSync pipeline completed successfully")
     print("PoPW artifact ready for on-chain submission")
 
