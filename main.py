@@ -60,8 +60,11 @@ def run_swarm():
     results = swarm.run_swarm(trajectories)
     for drone_id, result in results.items():
         status = result["status"]
-        risks = len(result["collision_risk"])
-        print(drone_id + ": status=" + status + ", collision_risks=" + str(risks))
+        predicted = result["conflicts_predicted"]
+        maneuvers = len(result["avoidance_maneuvers"])
+        print(drone_id + ": status=" + status +
+              ", conflicts_predicted=" + str(predicted) +
+              ", avoidance_maneuvers=" + str(maneuvers))
     print()
 
 

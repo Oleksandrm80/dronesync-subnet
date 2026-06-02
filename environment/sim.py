@@ -34,59 +34,119 @@ class DroneEnvironment:
 
 class SwarmEnvironment:
     """
-    Multi-drone swarm simulation.
-    Coordinates N drones simultaneously with collision avoidance.
+    Multi-drone swarm simulation with predictive collision avoidance.
+
+    Uses time-stepped trajectory comparison: at each flight step, checks
+    pairwise distance between all drones. Flags conflicts before they happen
+    and generates avoidance maneuvers (altitude separation).
     """
 
-    SAFE_DISTANCE = 0.0005  # ~50 meters in lat/lon
+    SAFE_DISTANCE_M = 50.0   # minimum separation in meters
+    STEP_TIME_S = 5.0        # seconds per trajectory step
 
     def __init__(self, n_drones: int = 3):
         self.n_drones = n_drones
-        self.drone_positions = {}
 
     def run_swarm(self, trajectories: list) -> dict:
         """
-        Run simulation for multiple drones simultaneously.
-        Returns sensor data and collision report for each drone.
+        Run predictive swarm simulation across full trajectories.
+        Checks all time steps, not just final positions.
+        Returns per-drone results with collision predictions and avoidance actions.
         """
+        drone_ids = [f"drone_{i}" for i in range(len(trajectories))]
+
+        # Align all trajectories to the same number of steps
+        max_steps = max(len(t.positions) for t in trajectories)
+        padded = []
+        for traj in trajectories:
+            positions = list(traj.positions)
+            while len(positions) < max_steps:
+                positions.append(positions[-1])  # hover at final position
+            padded.append(positions)
+
+        # Predict collisions across all time steps
+        all_conflicts = {drone_id: [] for drone_id in drone_ids}
+        for step in range(max_steps):
+            step_positions = [(drone_ids[i], padded[i][step])
+                              for i in range(len(drone_ids))]
+            for i, (drone_id, pos) in enumerate(step_positions):
+                for j, (other_id, other_pos) in enumerate(step_positions):
+                    if i >= j:
+                        continue
+                    dist = self._haversine(
+                        pos[0], pos[1], other_pos[0], other_pos[1]
+                    )
+                    if dist < self.SAFE_DISTANCE_M:
+                        conflict = {
+                            "step": step,
+                            "time_s": step * self.STEP_TIME_S,
+                            "other_drone": other_id,
+                            "distance_m": round(dist, 1),
+                            "severity": "CRITICAL" if dist < 20 else "HIGH",
+                            "avoidance": self._avoidance_action(pos, other_pos, dist)
+                        }
+                        all_conflicts[drone_id].append(conflict)
+
         results = {}
-        all_positions = []
-
-        for i, traj in enumerate(trajectories):
-            drone_id = f"drone_{i}"
-            last = traj.positions[-1]
-            self.drone_positions[drone_id] = last
-            all_positions.append((drone_id, last))
-
-        for drone_id, pos in all_positions:
-            collisions = self._check_collisions(drone_id, pos, all_positions)
-            sensor = self._simulate_sensor(pos, collisions)
+        for i, drone_id in enumerate(drone_ids):
+            final_pos = padded[i][-1]
+            conflicts = all_conflicts[drone_id]
+            avoidance_applied = self._apply_avoidance(
+                padded[i], [padded[j] for j in range(len(drone_ids)) if j != i]
+            )
+            sensor = self._simulate_sensor(final_pos, conflicts)
             results[drone_id] = {
                 "sensor_data": sensor,
-                "collision_risk": collisions,
-                "status": "WARNING" if collisions else "CLEAR"
+                "collision_risk": conflicts,
+                "avoidance_maneuvers": avoidance_applied,
+                "status": "WARNING" if conflicts else "CLEAR",
+                "trajectory_steps": len(padded[i]),
+                "conflicts_predicted": len(conflicts)
             }
 
         return results
 
-    def _check_collisions(self, drone_id: str, pos: list,
-                           all_positions: list) -> list:
-        """Check if drone is too close to other drones."""
-        risks = []
-        for other_id, other_pos in all_positions:
-            if other_id == drone_id:
-                continue
-            dist = math.sqrt(
-                (pos[0] - other_pos[0]) ** 2 +
-                (pos[1] - other_pos[1]) ** 2
-            )
-            if dist < self.SAFE_DISTANCE:
-                risks.append({
-                    "other_drone": other_id,
-                    "distance": round(dist * 111000, 1),
-                    "severity": "HIGH" if dist < self.SAFE_DISTANCE / 2 else "LOW"
-                })
-        return risks
+    def _avoidance_action(self, pos: list, other_pos: list,
+                          dist: float) -> dict:
+        """Generate avoidance maneuver based on relative position."""
+        alt_diff = pos[2] - other_pos[2]
+        if abs(alt_diff) < 10:
+            # Same altitude — one climbs, one descends
+            action = "CLIMB_10M" if pos[0] < other_pos[0] else "DESCEND_10M"
+        else:
+            action = "MAINTAIN_SEPARATION"
+        return {
+            "action": action,
+            "current_separation_m": round(dist, 1),
+            "target_separation_m": self.SAFE_DISTANCE_M
+        }
+
+    def _apply_avoidance(self, my_positions: list,
+                          other_trajectories: list) -> list:
+        """
+        Apply altitude separation to avoid predicted conflicts.
+        Returns list of maneuvers applied.
+        """
+        maneuvers = []
+        for step, pos in enumerate(my_positions):
+            for other_traj in other_trajectories:
+                other_pos = other_traj[min(step, len(other_traj) - 1)]
+                dist = self._haversine(
+                    pos[0], pos[1], other_pos[0], other_pos[1]
+                )
+                if dist < self.SAFE_DISTANCE_M:
+                    alt_separation = abs(pos[2] - other_pos[2])
+                    if alt_separation < 10:
+                        # Apply altitude adjustment in-place
+                        my_positions[step] = [
+                            pos[0], pos[1], pos[2] + 10, pos[3]
+                        ]
+                        maneuvers.append({
+                            "step": step,
+                            "action": "altitude_adjusted",
+                            "new_alt": pos[2] + 10
+                        })
+        return maneuvers
 
     def _simulate_sensor(self, pos: list, collisions: list) -> SensorData:
         """Generate sensor data with collision awareness."""
@@ -125,5 +185,16 @@ class SwarmEnvironment:
                     random.uniform(-0.02, 0.02)
                 ]
             },
-            timestamp=pos[2] if len(pos) > 2 else 0.0
+            timestamp=pos[3] if len(pos) > 3 else 0.0
         )
+
+    def _haversine(self, lat1: float, lon1: float,
+                   lat2: float, lon2: float) -> float:
+        """Distance between two GPS points in meters."""
+        R = 6371000
+        phi1, phi2 = math.radians(lat1), math.radians(lat2)
+        dphi = math.radians(lat2 - lat1)
+        dlambda = math.radians(lon2 - lon1)
+        a = (math.sin(dphi / 2) ** 2 +
+             math.cos(phi1) * math.cos(phi2) * math.sin(dlambda / 2) ** 2)
+        return R * 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a))
