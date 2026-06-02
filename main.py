@@ -416,18 +416,18 @@ def run_emergency():
         authority_id="ZURICH_FIRE_DEPT_001"
     )
     print("emergency_id: " + emergency["emergency_id"])
-    print("type: " + emergency["type"])
-    print("action: " + emergency["action"])
-    print("radius_m: " + str(emergency["radius_m"]))
+    print("type: " + emergency["type"] + " | needs: " + str(emergency["needs"]))
     drone_pos = [47.3782, 8.5432, 50.0]
-    check1 = override.check_drone_override(drone_pos, emergency, mission_type="urban_delivery")
-    print("urban_delivery: override=" + str(check1["override"]) + " (FIRE priority=10 > mission priority=3)")
-    check2 = override.check_drone_override(drone_pos, emergency, mission_type="medical_delivery")
-    print("medical_delivery: override=" + str(check2["override"]) + " (FIRE priority=10 > medical priority=9)")
-    # ACCIDENT (priority=8) не перехватит медицинский дрон
-    accident = override.broadcast_emergency("ACCIDENT", {"lat": 47.3780, "lon": 8.5430}, "AUTH_002")
-    check3 = override.check_drone_override(drone_pos, accident, mission_type="medical_delivery")
-    print("medical vs ACCIDENT: override=" + str(check3["override"]) + " (ACCIDENT priority=8 < medical priority=9 -> PROTECTED)")
+    # cargo дрон — перехватывается пожаром
+    c1 = override.check_drone_override(drone_pos, emergency, mission_type="urban_delivery")
+    print("urban_delivery (cargo): override=" + str(c1["override"]) + " -> " + c1.get("action", c1.get("reason", "")))
+    # medical дрон — пожарной службе не нужен
+    c2 = override.check_drone_override(drone_pos, emergency, mission_type="organ_delivery")
+    print("organ_delivery (medical): override=" + str(c2["override"]) + " -> " + c2.get("reason", "") + " | " + c2.get("note", ""))
+    # medical emergency — нужен именно medical дрон
+    med_em = override.broadcast_emergency("MEDICAL_EMERGENCY", {"lat": 47.3780, "lon": 8.5430}, "ZURICH_HOSPITAL_001")
+    c3 = override.check_drone_override(drone_pos, med_em, mission_type="organ_delivery")
+    print("organ_delivery vs MEDICAL_EMERGENCY: override=" + str(c3["override"]) + " -> " + c3.get("action", c3.get("reason", "")))
     status = override.get_status()
     print("redirected_drones: " + str(status["redirected_drones"]))
     print("protected_drones: " + str(status["protected_drones"]))
