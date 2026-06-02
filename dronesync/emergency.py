@@ -16,10 +16,11 @@ EMERGENCY_TYPES = {
 
 # Mission priorities — higher = more protected from override
 MISSION_PRIORITIES = {
-    "medical_delivery": 9,    # medical supplies — only FIRE/HAZMAT can override
+    "organ_delivery": 11,     # human organ transplant — NEVER overridden by anything
+    "medical_delivery": 9,    # medicine/blood — only FIRE/HAZMAT can override
     "search_rescue": 9,       # already doing rescue — not redirected
     "urban_delivery": 3,      # commercial delivery — easily redirected
-    "patrol": 2,              # patrol — easily redirected
+    "patrol": 2,
     "surveillance": 2,
     "inspection": 3,
 }
