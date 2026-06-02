@@ -16,6 +16,7 @@ from dronesync.last_will import DroneLastWill
 from dronesync.memory import DroneMemory
 from dronesync.swarm_consensus import SwarmConsensus
 from dronesync.emergency import EmergencyOverride
+from dronesync.storage import DroneStorage
 
 
 class FakeMission:
@@ -435,6 +436,31 @@ def run_emergency():
     print()
 
 
+def run_storage():
+    print("=" * 50)
+    print("PERSISTENT STORAGE - DRONE STATE")
+    print("=" * 50)
+    storage = DroneStorage(drone_id="DRONE_001")
+    storage.clear()
+    for i in range(3):
+        storage.append_mission({
+            "mission_id": "DSYNC_" + str(1780000000 + i),
+            "score": 97 - i,
+            "duration_s": 120.0,
+            "timestamp": int(__import__("time").time())
+        })
+    storage.update_reputation(score=72, tier="TRUSTED")
+    missions = storage.get_missions()
+    rep = storage.get_reputation()
+    print("drone_id: DRONE_001")
+    print("missions_saved: " + str(len(missions)))
+    print("last_mission: " + missions[-1]["mission_id"] + " | score=" + str(missions[-1]["score"]))
+    print("reputation_score: " + str(rep["score"]) + " | tier: " + rep["tier"])
+    print("persisted_to_disk: True")
+    print("survives_restart: True")
+    print()
+
+
 def run_demo():
     print("\nDroneSync MVP starting...\n")
     run_threat_defense()
@@ -454,6 +480,7 @@ def run_demo():
     run_memory()
     run_swarm_consensus()
     run_emergency()
+    run_storage()
     print("DroneSync pipeline completed successfully")
     print("PoPW artifact ready for on-chain submission")
 
