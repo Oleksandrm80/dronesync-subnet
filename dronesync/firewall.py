@@ -14,7 +14,7 @@ class DroneFirewall:
     """
 
     MAX_COMMANDS_PER_MINUTE = 20
-    ALLOWED_ACTIONS = {"fly", "hover", "land", "return_home", "scan", "deliver"}
+    ALLOWED_ACTIONS = {"fly", "hover", "land", "return_home", "scan", "deliver", "execute_task"}
 
     def __init__(self, drone_id: str):
         self.drone_id = drone_id

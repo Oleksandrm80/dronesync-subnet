@@ -1,3 +1,4 @@
+from dronesync.synapse import demo_synapse
 from dronesync.threat_defense import ThreatDefense
 from dronesync.node import KonnexNode
 from environment.obstacles import DynamicObstacleManager
@@ -535,6 +536,7 @@ def run_demo():
     run_storage()
     run_scoreroot()
     run_sensor_bundle()
+    demo_synapse()
     print("DroneSync pipeline completed successfully")
     print("PoPW artifact ready for on-chain submission")
 
