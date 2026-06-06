@@ -999,6 +999,23 @@ const term = document.getElementById('terminal');
 if (term) term.scrollTop = term.scrollHeight;
 
 setTimeout(() => location.reload(), 30000);
+// WebSocket live data
+const ws = new WebSocket('ws://localhost:8765');
+ws.onmessage = function(event) {
+    const data = JSON.parse(event.data);
+    const conf = document.getElementById('last-conf');
+    const tasks = document.getElementById('validator-tasks');
+    const term = document.getElementById('terminal');
+    if (conf) conf.textContent = data.conf;
+    if (tasks) tasks.textContent = parseInt(tasks.textContent || 0) + 1;
+    if (term) {
+        const line = document.createElement('div');
+        line.className = 'term-line success prompt';
+        line.innerHTML = '<span class="term-ts">' + data.time + '</span> task=' + data.task + ' action_id=' + data.action_id + ' conf=' + data.conf;
+        term.appendChild(line);
+        term.scrollTop = term.scrollHeight;
+    }
+};
 </script>
 </body>
 </html>"""
