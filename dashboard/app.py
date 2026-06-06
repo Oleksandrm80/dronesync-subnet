@@ -12,6 +12,7 @@ import time
 import json
 import threading
 import random
+import subprocess
 from http.server import HTTPServer, BaseHTTPRequestHandler
 from urllib.parse import urlparse, parse_qs
 
@@ -20,7 +21,6 @@ from dronesync.reputation import DroneReputation
 from dronesync.storage import DroneStorage
 from dronesync.node import KonnexNode
 
-# Глобальное состояние дашборда
 state = {
     "drones": {},
     "missions": [],
@@ -29,10 +29,50 @@ state = {
     "netuid": 4,
     "network": "testnet",
     "last_update": 0,
+    "miner_tasks": [],
+    "uid": 136,
 }
 
 DRONE_IDS = ["DRONE_001", "DRONE_002", "DRONE_003"]
 handlers = {d: DroneNavSynapseHandler(drone_id=d, use_ai_planner=True) for d in DRONE_IDS}
+
+
+def _parse_miner_logs() -> list:
+    tasks = []
+    try:
+        result = subprocess.run(
+            ["docker", "logs", "--tail", "200", "knx-subnet-drone-navigation-subnet-miner-1"],
+            capture_output=True, text=True, timeout=5
+        )
+        lines = (result.stdout + result.stderr).splitlines()
+        for line in lines:
+            if "DRONE_MINER" in line and "conf=" in line:
+                try:
+                    task_id = ""
+                    conf = ""
+                    action = ""
+                    ts_str = ""
+                    for part in line.split():
+                        if part.startswith("round-") or part.startswith("task_id="):
+                            task_id = part.replace("task_id=", "")
+                        if part.startswith("conf="):
+                            conf = part.replace("conf=", "")
+                        if part.startswith("action="):
+                            action = part.replace("action=", "")
+                    if len(line) > 19 and line[4] == "-":
+                        ts_str = line[:19]
+                    if task_id or conf:
+                        tasks.append({
+                            "task_id": task_id or "—",
+                            "conf": conf or "—",
+                            "action": action or "—",
+                            "ts": ts_str or "—",
+                        })
+                except Exception:
+                    pass
+    except Exception:
+        pass
+    return tasks[-10:]
 
 
 def _make_task(drone_idx: int = 0) -> dict:
@@ -59,7 +99,6 @@ def _make_task(drone_idx: int = 0) -> dict:
 
 
 def refresh_state():
-    """Запускает миссию для каждого дрона и обновляет глобальное состояние."""
     for idx, drone_id in enumerate(DRONE_IDS):
         task = _make_task(idx)
         result = handlers[drone_id].handle(task)
@@ -81,7 +120,6 @@ def refresh_state():
             "timestamp": int(time.time()),
         }
 
-    # Суммарный статус роя
     scores = [state["drones"][d]["score"] for d in DRONE_IDS]
     on_chain = all(state["drones"][d]["on_chain_ready"] for d in DRONE_IDS)
     state["swarm_status"] = {
@@ -95,23 +133,20 @@ def refresh_state():
         "network": state["network"],
     }
 
-    # Подключение к ноде Konnex
     node = KonnexNode(wallet_address="0x5a4E...51f2", network="testnet")
     node.connect()
-    ns = node.get_status()
-    state["node_status"] = ns
+    state["node_status"] = node.get_status()
 
-    # История миссий (последние 10)
     for d in DRONE_IDS:
         state["missions"].append(dict(state["drones"][d]))
     if len(state["missions"]) > 30:
         state["missions"] = state["missions"][-30:]
 
+    state["miner_tasks"] = _parse_miner_logs()
     state["last_update"] = int(time.time())
 
 
 def background_loop():
-    """Обновляет состояние каждые 30 секунд."""
     while True:
         try:
             refresh_state()
@@ -121,214 +156,664 @@ def background_loop():
 
 
 HTML_TEMPLATE = """<!DOCTYPE html>
-<html lang="ru">
+<html lang="en">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>DroneSync Live Dashboard — Konnex NETUID 4</title>
+<title>DroneSync — Konnex NETUID 4</title>
 <style>
+  @import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&display=swap');
+
+  :root {
+    --bg:       #0c0c0e;
+    --bg2:      #111114;
+    --bg3:      #18181c;
+    --border:   #2a2a30;
+    --border2:  #3a3a44;
+    --text:     #e8e8ec;
+    --muted:    #6b6b78;
+    --dim:      #3a3a44;
+    --accent:   #c8c8d4;
+    --green:    #4ade80;
+    --amber:    #fbbf24;
+    --red:      #f87171;
+    --purple:   #a78bfa;
+  }
+
   * { box-sizing: border-box; margin: 0; padding: 0; }
-  body { background: #0a0e1a; color: #e0e6f0; font-family: 'Courier New', monospace; }
-  header { background: linear-gradient(90deg, #0d1b2a, #1a3a5c); padding: 20px 30px;
-           border-bottom: 2px solid #00d4ff; display: flex; align-items: center; gap: 16px; }
-  .logo { font-size: 28px; font-weight: bold; color: #00d4ff; letter-spacing: 2px; }
-  .subtitle { font-size: 13px; color: #7fa8c9; }
-  .badge { background: #00d4ff22; border: 1px solid #00d4ff; color: #00d4ff;
-           padding: 4px 12px; border-radius: 12px; font-size: 12px; margin-left: auto; }
-  .badge.live { background: #00ff8822; border-color: #00ff88; color: #00ff88; animation: pulse 2s infinite; }
-  @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.5} }
-  main { padding: 24px 30px; }
-  .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 20px; margin-bottom: 24px; }
-  .card { background: #111827; border: 1px solid #1e3a5f; border-radius: 12px; padding: 20px; }
-  .card h3 { color: #00d4ff; font-size: 14px; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 14px; }
-  .metric { display: flex; justify-content: space-between; padding: 6px 0;
-            border-bottom: 1px solid #1e2a3a; font-size: 13px; }
-  .metric:last-child { border-bottom: none; }
-  .metric .val { color: #00ff88; font-weight: bold; }
-  .metric .val.warn { color: #ffaa00; }
-  .metric .val.danger { color: #ff4444; }
-  .score-bar { height: 6px; background: #1e3a5f; border-radius: 3px; margin-top: 8px; overflow: hidden; }
-  .score-fill { height: 100%; border-radius: 3px; background: linear-gradient(90deg, #00d4ff, #00ff88); transition: width 0.5s; }
-  .drone-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 16px; }
-  .drone-card { background: #0d1b2a; border: 1px solid #1e4a6f; border-radius: 10px; padding: 16px; }
-  .drone-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; }
-  .drone-id { font-weight: bold; color: #00d4ff; font-size: 15px; }
-  .status-dot { width: 10px; height: 10px; border-radius: 50%; background: #00ff88; animation: pulse 2s infinite; }
-  .status-dot.warn { background: #ffaa00; }
-  .tag { display: inline-block; padding: 2px 8px; border-radius: 6px; font-size: 11px;
-         background: #00ff8822; color: #00ff88; border: 1px solid #00ff8844; margin-right: 4px; }
-  .tag.blue { background: #00d4ff22; color: #00d4ff; border-color: #00d4ff44; }
-  .tag.warn { background: #ffaa0022; color: #ffaa00; border-color: #ffaa0044; }
-  .missions-table { width: 100%; border-collapse: collapse; font-size: 12px; }
-  .missions-table th { background: #0d1b2a; color: #7fa8c9; padding: 8px 10px; text-align: left; border-bottom: 1px solid #1e3a5f; }
-  .missions-table td { padding: 7px 10px; border-bottom: 1px solid #111827; }
-  .missions-table tr:hover td { background: #0d1b2a33; }
-  .refresh-btn { background: #00d4ff22; border: 1px solid #00d4ff; color: #00d4ff;
-                 padding: 8px 20px; border-radius: 8px; cursor: pointer; font-family: inherit;
-                 font-size: 13px; transition: all 0.2s; }
-  .refresh-btn:hover { background: #00d4ff33; }
-  footer { text-align: center; padding: 20px; color: #3a5a7a; font-size: 12px; border-top: 1px solid #1e3a5f; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'Space Grotesk', -apple-system, sans-serif;
+    font-size: 13px;
+    line-height: 1.5;
+  }
+
+  /* ── HEADER ── */
+  header {
+    display: flex;
+    align-items: center;
+    gap: 20px;
+    padding: 0 32px;
+    height: 58px;
+    background: var(--bg);
+    border-bottom: 1px solid var(--border);
+    position: sticky;
+    top: 0;
+    z-index: 100;
+  }
+
+  .logo {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+  /* Drone SVG icon */
+  .logo-icon {
+    width: 30px;
+    height: 30px;
+    flex-shrink: 0;
+  }
+  .logo-name {
+    font-size: 15px;
+    font-weight: 700;
+    letter-spacing: 0.02em;
+    color: var(--text);
+  }
+  .logo-slash {
+    color: var(--muted);
+    font-weight: 300;
+    margin: 0 2px;
+  }
+  .logo-sub {
+    font-size: 13px;
+    font-weight: 400;
+    color: var(--muted);
+  }
+
+  .header-right {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-left: auto;
+  }
+
+  .tag {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    padding: 3px 10px;
+    border-radius: 4px;
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    border: 1px solid var(--border);
+    color: var(--muted);
+    background: var(--bg2);
+  }
+  .tag-live {
+    border-color: var(--green);
+    color: var(--green);
+    background: rgba(74,222,128,0.06);
+  }
+  .tag-live .dot {
+    width: 5px; height: 5px;
+    border-radius: 50%;
+    background: var(--green);
+    animation: pulse 2s infinite;
+  }
+  .tag-uid {
+    border-color: var(--purple);
+    color: var(--purple);
+    background: rgba(167,139,250,0.06);
+  }
+  @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.3} }
+
+  .btn-refresh {
+    background: var(--bg3);
+    border: 1px solid var(--border);
+    color: var(--muted);
+    padding: 5px 14px;
+    border-radius: 4px;
+    cursor: pointer;
+    font-family: inherit;
+    font-size: 12px;
+    font-weight: 500;
+    transition: all 0.15s;
+    letter-spacing: 0.03em;
+  }
+  .btn-refresh:hover { border-color: var(--border2); color: var(--text); }
+
+  /* ── LAYOUT ── */
+  main {
+    max-width: 1300px;
+    margin: 0 auto;
+    padding: 32px 32px 48px;
+  }
+
+  .section-label {
+    font-size: 10px;
+    font-weight: 600;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--muted);
+    margin-bottom: 12px;
+    margin-top: 36px;
+  }
+  .section-label:first-child { margin-top: 0; }
+
+  /* ── KPI STRIP ── */
+  .kpi-strip {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 1px;
+    background: var(--border);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    overflow: hidden;
+  }
+  @media (max-width: 700px) { .kpi-strip { grid-template-columns: repeat(2, 1fr); } }
+
+  .kpi {
+    background: var(--bg2);
+    padding: 20px 22px;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+  .kpi-value {
+    font-size: 28px;
+    font-weight: 700;
+    color: var(--text);
+    letter-spacing: -0.02em;
+    line-height: 1;
+  }
+  .kpi-value.green { color: var(--green); }
+  .kpi-value.purple { color: var(--purple); }
+  .kpi-label {
+    font-size: 11px;
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    font-weight: 500;
+    margin-top: 2px;
+  }
+
+  /* ── PIPELINE ── */
+  .pipeline {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 1px;
+    background: var(--border);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    overflow: hidden;
+  }
+  @media (max-width: 700px) { .pipeline { grid-template-columns: repeat(2, 1fr); } }
+
+  .pipe {
+    background: var(--bg2);
+    padding: 18px 20px;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+  .pipe-n {
+    font-size: 10px;
+    font-weight: 700;
+    color: var(--dim);
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+  }
+  .pipe-name {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--text);
+  }
+  .pipe-ok {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    font-size: 11px;
+    color: var(--green);
+    font-weight: 500;
+  }
+  .pipe-ok::before {
+    content: "";
+    display: inline-block;
+    width: 5px; height: 5px;
+    border-radius: 50%;
+    background: var(--green);
+  }
+
+  /* ── DRONE GRID ── */
+  .drone-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 12px;
+  }
+  @media (max-width: 900px) { .drone-grid { grid-template-columns: 1fr; } }
+
+  .drone-card {
+    background: var(--bg2);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    overflow: hidden;
+    transition: border-color 0.2s;
+  }
+  .drone-card:hover { border-color: var(--border2); }
+
+  /* top "image" area — drone silhouette */
+  .drone-visual {
+    background: var(--bg3);
+    border-bottom: 1px solid var(--border);
+    height: 120px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    position: relative;
+    overflow: hidden;
+  }
+  .drone-visual svg {
+    width: 80px;
+    height: 80px;
+    opacity: 0.55;
+    filter: drop-shadow(0 0 18px rgba(167,139,250,0.18));
+  }
+  .drone-visual-id {
+    position: absolute;
+    bottom: 8px;
+    left: 12px;
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--muted);
+  }
+  .drone-visual-status {
+    position: absolute;
+    top: 10px;
+    right: 10px;
+  }
+
+  .status-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 2px 8px;
+    border-radius: 3px;
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+  }
+  .status-active {
+    background: rgba(74,222,128,0.1);
+    border: 1px solid rgba(74,222,128,0.3);
+    color: var(--green);
+  }
+  .status-active .dot { width:4px;height:4px;border-radius:50%;background:var(--green);animation:pulse 2s infinite; }
+  .status-idle {
+    background: rgba(251,191,36,0.1);
+    border: 1px solid rgba(251,191,36,0.3);
+    color: var(--amber);
+  }
+
+  .drone-body { padding: 14px 16px; }
+  .drone-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 5px 0;
+    border-bottom: 1px solid var(--border);
+    font-size: 12px;
+  }
+  .drone-row:last-child { border-bottom: none; }
+  .drone-row-key { color: var(--muted); }
+  .drone-row-val { font-weight: 600; color: var(--text); }
+  .drone-row-val.green { color: var(--green); }
+  .drone-row-val.amber { color: var(--amber); }
+  .drone-row-val.purple { color: var(--purple); font-size: 11px; }
+  .drone-row-val.mono { font-family: monospace; font-size: 10px; color: var(--muted); }
+
+  .score-track {
+    height: 2px;
+    background: var(--border);
+    border-radius: 1px;
+    margin: 8px 0;
+    overflow: hidden;
+  }
+  .score-fill {
+    height: 100%;
+    border-radius: 1px;
+    background: linear-gradient(90deg, var(--purple), var(--green));
+    transition: width 0.6s;
+  }
+
+  /* ── TASKS TABLE ── */
+  .table-wrap {
+    background: var(--bg2);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    overflow: hidden;
+  }
+  table { width: 100%; border-collapse: collapse; }
+  thead { background: var(--bg3); }
+  th {
+    padding: 10px 16px;
+    text-align: left;
+    font-size: 10px;
+    font-weight: 700;
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    border-bottom: 1px solid var(--border);
+  }
+  td {
+    padding: 10px 16px;
+    border-bottom: 1px solid var(--border);
+    font-size: 12px;
+    color: var(--text);
+  }
+  tr:last-child td { border-bottom: none; }
+  tr:hover td { background: rgba(255,255,255,0.015); }
+
+  .conf-high { color: var(--green); font-weight: 700; }
+  .conf-mid  { color: var(--amber); font-weight: 700; }
+  .conf-low  { color: var(--red);   font-weight: 700; }
+  .mono { font-family: monospace; font-size: 11px; color: var(--muted); }
+
+  .chip-tee {
+    display: inline-block;
+    padding: 1px 7px;
+    border-radius: 3px;
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    background: rgba(167,139,250,0.12);
+    border: 1px solid rgba(167,139,250,0.25);
+    color: var(--purple);
+  }
+  .chip-ok {
+    display: inline-block;
+    padding: 1px 7px;
+    border-radius: 3px;
+    font-size: 10px;
+    font-weight: 700;
+    background: rgba(74,222,128,0.1);
+    border: 1px solid rgba(74,222,128,0.25);
+    color: var(--green);
+  }
+
+  /* ── FOOTER ── */
+  footer {
+    text-align: center;
+    padding: 24px 32px;
+    color: var(--dim);
+    font-size: 11px;
+    border-top: 1px solid var(--border);
+    margin-top: 48px;
+    letter-spacing: 0.04em;
+  }
 </style>
 </head>
 <body>
+
 <header>
-  <div>
-    <div class="logo">⬡ DroneSync</div>
-    <div class="subtitle">Konnex Subnet · NETUID {netuid} · {network}</div>
+  <div class="logo">
+    <!-- Drone SVG icon -->
+    <svg class="logo-icon" viewBox="0 0 30 30" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <circle cx="15" cy="15" r="4" fill="#6b6b78"/>
+      <circle cx="15" cy="15" r="2" fill="#a78bfa"/>
+      <!-- arms -->
+      <line x1="15" y1="11" x2="15" y2="4"  stroke="#6b6b78" stroke-width="1.2"/>
+      <line x1="15" y1="19" x2="15" y2="26" stroke="#6b6b78" stroke-width="1.2"/>
+      <line x1="11" y1="15" x2="4"  y2="15" stroke="#6b6b78" stroke-width="1.2"/>
+      <line x1="19" y1="15" x2="26" y2="15" stroke="#6b6b78" stroke-width="1.2"/>
+      <!-- rotors -->
+      <circle cx="15" cy="4"  r="3" stroke="#3a3a44" stroke-width="1.2" fill="none"/>
+      <circle cx="15" cy="26" r="3" stroke="#3a3a44" stroke-width="1.2" fill="none"/>
+      <circle cx="4"  cy="15" r="3" stroke="#3a3a44" stroke-width="1.2" fill="none"/>
+      <circle cx="26" cy="15" r="3" stroke="#3a3a44" stroke-width="1.2" fill="none"/>
+    </svg>
+    <span class="logo-name">DroneSync</span>
+    <span class="logo-slash">/</span>
+    <span class="logo-sub">Konnex</span>
   </div>
-  <div class="badge live">● LIVE</div>
-  <div class="badge">{active}/{total} DRONES</div>
-  <button class="refresh-btn" onclick="location.reload()">⟳ Refresh</button>
+
+  <div class="header-right">
+    <span class="tag tag-live"><span class="dot"></span>Live</span>
+    <span class="tag">NETUID {netuid} · {network}</span>
+    <span class="tag tag-uid">UID {uid}</span>
+    <button class="btn-refresh" onclick="location.reload()">↻ Refresh</button>
+  </div>
 </header>
+
 <main>
 
-  <div class="grid">
-    <div class="card">
-      <h3>Swarm Status</h3>
-      <div class="metric"><span>Active Drones</span><span class="val">{active} / {total}</span></div>
-      <div class="metric"><span>Avg Score</span><span class="val">{avg_score}</span></div>
-      <div class="metric"><span>Min / Max Score</span><span class="val">{min_score} / {max_score}</span></div>
-      <div class="metric"><span>On-Chain Ready</span><span class="val {chain_cls}">{on_chain}</span></div>
-      <div class="score-bar"><div class="score-fill" style="width:{avg_score}%"></div></div>
+  <!-- KPI -->
+  <div class="section-label">Overview</div>
+  <div class="kpi-strip">
+    <div class="kpi">
+      <div class="kpi-value">{active}</div>
+      <div class="kpi-label">Active Drones</div>
     </div>
-    <div class="card">
-      <h3>Konnex Node</h3>
-      <div class="metric"><span>Connected</span><span class="val">{node_connected}</span></div>
-      <div class="metric"><span>Network</span><span class="val">{node_network}</span></div>
-      <div class="metric"><span>Session ID</span><span class="val">{node_session}</span></div>
-      <div class="metric"><span>Last Update</span><span class="val">{last_update}</span></div>
+    <div class="kpi">
+      <div class="kpi-value green">{avg_score}</div>
+      <div class="kpi-label">Avg Mission Score</div>
     </div>
-    <div class="card">
-      <h3>PoPW Pipeline</h3>
-      <div class="metric"><span>Task Instruction</span><span class="val tag blue">✓ OK</span></div>
-      <div class="metric"><span>Policy Execution Trace</span><span class="val tag blue">✓ TEE</span></div>
-      <div class="metric"><span>Sensor Bundle</span><span class="val tag blue">✓ Hashed</span></div>
-      <div class="metric"><span>Independent Scoring</span><span class="val tag blue">✓ On-Chain</span></div>
+    <div class="kpi">
+      <div class="kpi-value">{task_count}</div>
+      <div class="kpi-label">Validator Tasks</div>
+    </div>
+    <div class="kpi">
+      <div class="kpi-value purple">{last_conf}</div>
+      <div class="kpi-label">Last Confidence</div>
     </div>
   </div>
 
-  <h3 style="color:#00d4ff;margin-bottom:14px;font-size:14px;letter-spacing:1px;text-transform:uppercase;">
-    Drone Fleet
-  </h3>
+  <!-- PoPW Pipeline -->
+  <div class="section-label">PoPW Pipeline</div>
+  <div class="pipeline">
+    <div class="pipe">
+      <div class="pipe-n">Step 01</div>
+      <div class="pipe-name">Task Instruction</div>
+      <div class="pipe-ok">Verified</div>
+    </div>
+    <div class="pipe">
+      <div class="pipe-n">Step 02</div>
+      <div class="pipe-name">Policy Execution Trace</div>
+      <div class="pipe-ok">TEE Signed</div>
+    </div>
+    <div class="pipe">
+      <div class="pipe-n">Step 03</div>
+      <div class="pipe-name">Sensor Bundle</div>
+      <div class="pipe-ok">Hashed</div>
+    </div>
+    <div class="pipe">
+      <div class="pipe-n">Step 04</div>
+      <div class="pipe-name">Independent Scoring</div>
+      <div class="pipe-ok">On-Chain</div>
+    </div>
+  </div>
+
+  <!-- Validator Tasks -->
+  <div class="section-label">Validator Tasks — real data</div>
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr><th>Task ID</th><th>Confidence</th><th>Action</th><th>Timestamp</th></tr>
+      </thead>
+      <tbody>{task_rows}</tbody>
+    </table>
+  </div>
+
+  <!-- Drone Fleet -->
+  <div class="section-label">Drone Fleet</div>
   <div class="drone-grid">{drone_cards}</div>
 
-  <h3 style="color:#00d4ff;margin:24px 0 14px;font-size:14px;letter-spacing:1px;text-transform:uppercase;">
-    Recent Missions
-  </h3>
-  <div class="card">
-    <table class="missions-table">
+  <!-- Recent Missions -->
+  <div class="section-label">Recent Missions</div>
+  <div class="table-wrap">
+    <table>
       <thead>
-        <tr>
-          <th>Mission ID</th><th>Drone</th><th>Score</th><th>TEE</th>
-          <th>Security</th><th>On-Chain</th><th>Time</th>
-        </tr>
+        <tr><th>Mission ID</th><th>Drone</th><th>Score</th><th>TEE</th><th>Security</th><th>On-Chain</th><th>Time</th></tr>
       </thead>
       <tbody>{mission_rows}</tbody>
     </table>
   </div>
 
 </main>
+
 <footer>
-  DroneSync — Proof of Concept on Konnex NETUID 4 Testnet &nbsp;|&nbsp;
-  PoPW: Task Instruction · Policy Trace · Sensor Bundle · Independent Scoring
+  DroneSync — Proof of Concept on Konnex NETUID 4 Testnet &nbsp;·&nbsp;
+  Miner UID {uid} &nbsp;·&nbsp; PoPW: Task · Trace · Sensor · Score &nbsp;·&nbsp;
+  {last_update}
 </footer>
-<script>
-  setTimeout(() => location.reload(), 30000);
-</script>
+
+<script>setTimeout(() => location.reload(), 30000);</script>
 </body>
 </html>"""
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Drone SVG (quadcopter top-down view) used inside drone cards
+# ──────────────────────────────────────────────────────────────────────────────
+DRONE_SVG = """<svg viewBox="0 0 80 80" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <circle cx="40" cy="40" r="10" fill="#2a2a30"/>
+  <circle cx="40" cy="40" r="5" fill="#a78bfa" opacity="0.6"/>
+  <line x1="40" y1="30" x2="40" y2="12" stroke="#3a3a44" stroke-width="2.5" stroke-linecap="round"/>
+  <line x1="40" y1="50" x2="40" y2="68" stroke="#3a3a44" stroke-width="2.5" stroke-linecap="round"/>
+  <line x1="30" y1="40" x2="12" y2="40" stroke="#3a3a44" stroke-width="2.5" stroke-linecap="round"/>
+  <line x1="50" y1="40" x2="68" y2="40" stroke="#3a3a44" stroke-width="2.5" stroke-linecap="round"/>
+  <circle cx="40" cy="10" r="7" stroke="#4a4a54" stroke-width="1.5" fill="none"/>
+  <circle cx="40" cy="70" r="7" stroke="#4a4a54" stroke-width="1.5" fill="none"/>
+  <circle cx="10" cy="40" r="7" stroke="#4a4a54" stroke-width="1.5" fill="none"/>
+  <circle cx="70" cy="40" r="7" stroke="#4a4a54" stroke-width="1.5" fill="none"/>
+</svg>"""
 
 
 def render_dashboard() -> str:
     s = state
     sw = s.get("swarm_status", {})
-    ns = s.get("node_status", {})
     drones = s.get("drones", {})
+    miner_tasks = s.get("miner_tasks", [])
+    uid = s.get("uid", 136)
+
+    last_conf = "—"
+    if miner_tasks:
+        last_conf = miner_tasks[-1].get("conf", "—")
+
+    # Validator task rows
+    task_rows = ""
+    if miner_tasks:
+        for t in reversed(miner_tasks):
+            conf_val = t.get("conf", "—")
+            try:
+                cf = float(conf_val)
+                conf_cls = "conf-high" if cf >= 0.80 else ("conf-mid" if cf >= 0.60 else "conf-low")
+            except Exception:
+                conf_cls = ""
+            task_rows += f"""<tr>
+          <td class="mono">{t.get("task_id","—")}</td>
+          <td><span class="{conf_cls}">{conf_val}</span></td>
+          <td>{t.get("action","—")}</td>
+          <td class="mono">{t.get("ts","—")}</td>
+        </tr>"""
+    else:
+        task_rows = '<tr><td colspan="4" style="text-align:center;color:var(--dim);padding:24px">Waiting for validator tasks...</td></tr>'
 
     # Drone cards
     drone_cards = ""
     for drone_id, d in drones.items():
         score = d.get("score", 0)
         tier = d.get("reputation_tier", "?")
-        status_cls = "" if score >= 80 else "warn"
-        chain_tag = "✓ Ready" if d.get("on_chain_ready") else "⏳ Pending"
-        chain_cls = "" if d.get("on_chain_ready") else "warn"
-        drone_cards += f"""
-        <div class="drone-card">
-          <div class="drone-header">
-            <span class="drone-id">{drone_id}</span>
-            <span class="status-dot {status_cls}"></span>
+        is_active = score >= 80
+        status_html = (
+            '<span class="status-chip status-active"><span class="dot"></span>Active</span>'
+            if is_active else
+            '<span class="status-chip status-idle">Idle</span>'
+        )
+        chain_val = "Ready"  if d.get("on_chain_ready") else "Pending"
+        chain_cls = "green"  if d.get("on_chain_ready") else "amber"
+        drone_cards += f"""<div class="drone-card">
+          <div class="drone-visual">
+            {DRONE_SVG}
+            <div class="drone-visual-id">{drone_id}</div>
+            <div class="drone-visual-status">{status_html}</div>
           </div>
-          <div class="metric"><span>Mission ID</span><span class="val" style="font-size:11px">{d.get("mission_id","?")[:18]}...</span></div>
-          <div class="metric"><span>Score</span><span class="val">{score}</span></div>
-          <div class="score-bar"><div class="score-fill" style="width:{score}%"></div></div>
-          <div class="metric" style="margin-top:8px"><span>TEE Status</span><span class="val">{d.get("tee_status","?")}</span></div>
-          <div class="metric"><span>Security</span><span class="val">{d.get("security_status","?")}</span></div>
-          <div class="metric"><span>Threat Level</span><span class="val">{d.get("threat_level","?")}</span></div>
-          <div class="metric"><span>Reputation</span><span class="val">{d.get("reputation_score","?")} ({tier})</span></div>
-          <div class="metric"><span>Bundle Hash</span><span class="val" style="font-size:11px">{d.get("bundle_hash","?")}</span></div>
-          <div class="metric"><span>On-Chain</span><span class="val {chain_cls}">{chain_tag}</span></div>
+          <div class="drone-body">
+            <div class="drone-row">
+              <span class="drone-row-key">Score</span>
+              <span class="drone-row-val green">{score}</span>
+            </div>
+            <div class="score-track"><div class="score-fill" style="width:{score}%"></div></div>
+            <div class="drone-row">
+              <span class="drone-row-key">TEE</span>
+              <span class="drone-row-val purple">{d.get("tee_status","?")}</span>
+            </div>
+            <div class="drone-row">
+              <span class="drone-row-key">Security</span>
+              <span class="drone-row-val">{d.get("security_status","?")}</span>
+            </div>
+            <div class="drone-row">
+              <span class="drone-row-key">Reputation</span>
+              <span class="drone-row-val">{d.get("reputation_score","?")} <span style="color:var(--muted)">({tier})</span></span>
+            </div>
+            <div class="drone-row">
+              <span class="drone-row-key">On-Chain</span>
+              <span class="drone-row-val {chain_cls}">{chain_val}</span>
+            </div>
+            <div class="drone-row">
+              <span class="drone-row-key">Bundle</span>
+              <span class="drone-row-val mono">{d.get("bundle_hash","?")}</span>
+            </div>
+          </div>
         </div>"""
 
     # Mission rows
     mission_rows = ""
     for m in reversed(s.get("missions", [])[-15:]):
         score = m.get("score", 0)
-        score_cls = "" if score >= 80 else ("warn" if score >= 50 else "danger")
-        chain = "✓" if m.get("on_chain_ready") else "⏳"
+        score_cls = "conf-high" if score >= 80 else ("conf-mid" if score >= 50 else "conf-low")
+        chain = '<span class="chip-ok">✓</span>' if m.get("on_chain_ready") else "⏳"
         ts = time.strftime("%H:%M:%S", time.localtime(m.get("timestamp", 0)))
-        mission_rows += f"""
-        <tr>
-          <td style="font-size:11px">{m.get("mission_id","?")[:20]}...</td>
+        mission_rows += f"""<tr>
+          <td class="mono">{m.get("mission_id","?")[:22]}...</td>
           <td>{m.get("drone_id","?")}</td>
-          <td><span class="val {score_cls}">{score}</span></td>
-          <td>{m.get("tee_status","?")}</td>
+          <td><span class="{score_cls}">{score}</span></td>
+          <td><span class="chip-tee">{m.get("tee_status","?")}</span></td>
           <td>{m.get("security_status","?")}</td>
           <td>{chain}</td>
-          <td>{ts}</td>
+          <td class="mono">{ts}</td>
         </tr>"""
 
     if not mission_rows:
-        mission_rows = '<tr><td colspan="7" style="text-align:center;color:#3a5a7a;padding:20px">Нет данных — нажмите Refresh</td></tr>'
+        mission_rows = '<tr><td colspan="7" style="text-align:center;color:var(--dim);padding:24px">No data — press Refresh</td></tr>'
 
-    chain_cls = "" if sw.get("all_on_chain_ready") else "warn"
     last_upd = time.strftime("%H:%M:%S", time.localtime(s.get("last_update", 0))) if s.get("last_update") else "—"
-    netuid = sw.get("netuid", 4)
-    network = sw.get("network", "testnet")
-    active = sw.get("active_drones", 0)
-    total = sw.get("total_drones", len(DRONE_IDS))
-    avg_score = sw.get("avg_score", 0)
-    min_score = sw.get("min_score", 0)
-    max_score = sw.get("max_score", 0)
-    on_chain = "✓ YES" if sw.get("all_on_chain_ready") else "⏳ Pending"
-    node_connected = "✓ Yes" if ns.get("connected") else "✗ No"
-    node_network = ns.get("network", "testnet")
-    raw_sid = ns.get("session_id")
-    node_session = str(raw_sid)[:12] if raw_sid else "—"
 
-    # Replace placeholders manually to avoid CSS brace conflicts
     html = HTML_TEMPLATE
-    html = html.replace("{netuid}", str(netuid))
-    html = html.replace("{network}", str(network))
-    html = html.replace("{active}", str(active))
-    html = html.replace("{total}", str(total))
-    html = html.replace("{avg_score}", str(avg_score))
-    html = html.replace("{min_score}", str(min_score))
-    html = html.replace("{max_score}", str(max_score))
-    html = html.replace("{on_chain}", on_chain)
-    html = html.replace("{chain_cls}", chain_cls)
-    html = html.replace("{node_connected}", node_connected)
-    html = html.replace("{node_network}", node_network)
-    html = html.replace("{node_session}", node_session)
+    html = html.replace("{netuid}",    str(sw.get("netuid", 4)))
+    html = html.replace("{network}",   str(sw.get("network", "testnet")))
+    html = html.replace("{active}",    str(sw.get("active_drones", 0)))
+    html = html.replace("{avg_score}", str(sw.get("avg_score", 0)))
+    html = html.replace("{last_conf}", str(last_conf))
+    html = html.replace("{task_count}",str(len(miner_tasks)))
+    html = html.replace("{uid}",       str(uid))
     html = html.replace("{last_update}", last_upd)
-    html = html.replace("{drone_cards}", drone_cards)
+    html = html.replace("{drone_cards}",  drone_cards)
     html = html.replace("{mission_rows}", mission_rows)
+    html = html.replace("{task_rows}",    task_rows)
     return html
 
 
 class DashboardHandler(BaseHTTPRequestHandler):
     def log_message(self, fmt, *args):
-        pass  # тихий режим
+        pass
 
     def do_GET(self):
         parsed = urlparse(self.path)
@@ -361,13 +846,11 @@ class DashboardHandler(BaseHTTPRequestHandler):
 
 
 def run_dashboard(host: str = "0.0.0.0", port: int = 8080):
-    print(f"[DroneSync Dashboard] Первичная загрузка данных...")
+    print(f"[DroneSync Dashboard] Loading data...")
     refresh_state()
-
-    print(f"[DroneSync Dashboard] Запуск фонового обновления каждые 30 сек...")
+    print(f"[DroneSync Dashboard] Background refresh every 30s...")
     t = threading.Thread(target=background_loop, daemon=True)
     t.start()
-
     print(f"[DroneSync Dashboard] http://{host}:{port}")
     server = HTTPServer((host, port), DashboardHandler)
     server.serve_forever()
