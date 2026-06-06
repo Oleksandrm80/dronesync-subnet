@@ -842,10 +842,10 @@ header {
 </div>
 
 <script>
-// Анимация маршрутов на карте
 const map = document.getElementById('map');
 const svg = document.getElementById('routes');
 
+// ── 1. МАРШРУТЫ с анимацией ──
 function drawRoutes() {
   if (!map || !svg) return;
   const W = map.offsetWidth;
@@ -855,21 +855,146 @@ function drawRoutes() {
   routes.forEach(r => {
     const x1 = r.x1 * W / 100, y1 = r.y1 * H / 100;
     const x2 = r.x2 * W / 100, y2 = r.y2 * H / 100;
-    const mx = (x1+x2)/2 + (Math.random()-0.5)*40;
+    const mx = (x1+x2)/2 + (Math.random()-0.5)*60;
     const my = (y1+y2)/2 + (Math.random()-0.5)*40;
     paths += `<path d="M${x1},${y1} Q${mx},${my} ${x2},${y2}"
-      stroke="rgba(0,255,136,0.2)" stroke-width="1" fill="none"
-      stroke-dasharray="4 4">
-      <animate attributeName="stroke-dashoffset" from="0" to="-16" dur="1s" repeatCount="indefinite"/>
-    </path>`;
+      stroke="rgba(0,255,136,0.25)" stroke-width="1" fill="none"
+      stroke-dasharray="6 4">
+      <animate attributeName="stroke-dashoffset" from="0" to="-20" dur="0.8s" repeatCount="indefinite"/>
+    </path>
+    <circle r="3" fill="#00ff88" opacity="0.8">
+      <animateMotion dur="${2.5 + Math.random()}s" repeatCount="indefinite" rotate="auto">
+        <mpath href="#p${Math.random().toString(36).slice(2)}"/>
+      </animateMotion>
+    </circle>`;
   });
   svg.innerHTML = paths;
 }
 
-window.addEventListener('load', drawRoutes);
+// ── 2. ДРОНЫ ДВИГАЮТСЯ по карте ──
+const dronePositions = {routes_data}.map((r, i) => ({
+  x: r.x1, y: r.y1, tx: r.x2, ty: r.y2,
+  px: r.x1, py: r.y1,
+  speed: 0.003 + Math.random() * 0.002,
+  t: Math.random(),
+  dir: 1
+}));
+
+const droneDots = document.querySelectorAll('.drone-dot');
+
+function animateDrones() {
+  dronePositions.forEach((d, i) => {
+    d.t += d.speed * d.dir;
+    if (d.t >= 1) { d.t = 1; d.dir = -1; }
+    if (d.t <= 0) { d.t = 0; d.dir = 1; }
+    const x = d.x + (d.tx - d.x) * d.t;
+    const y = d.y + (d.ty - d.y) * d.t;
+    if (droneDots[i]) {
+      droneDots[i].style.left = x + '%';
+      droneDots[i].style.top  = y + '%';
+    }
+  });
+  requestAnimationFrame(animateDrones);
+}
+
+// ── 3. МАТРИЦА — падающие символы ──
+function createMatrix() {
+  const mapEl = document.getElementById('map');
+  if (!mapEl) return;
+  const canvas = document.createElement('canvas');
+  canvas.style.cssText = 'position:absolute;inset:0;width:100%;height:100%;opacity:0.06;pointer-events:none;z-index:0';
+  mapEl.prepend(canvas);
+
+  const ctx = canvas.getContext('2d');
+  let cols, drops;
+
+  function resize() {
+    canvas.width  = mapEl.offsetWidth;
+    canvas.height = mapEl.offsetHeight;
+    cols  = Math.floor(canvas.width / 16);
+    drops = Array(cols).fill(1);
+  }
+  resize();
+  window.addEventListener('resize', resize);
+
+  const chars = '01アイウエオカキクケコサシスセソタチツテトナニヌネノ';
+  function drawMatrix() {
+    ctx.fillStyle = 'rgba(2,4,8,0.05)';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    ctx.fillStyle = '#00ff88';
+    ctx.font = '12px Share Tech Mono, monospace';
+    drops.forEach((y, i) => {
+      ctx.fillText(chars[Math.floor(Math.random() * chars.length)], i * 16, y * 16);
+      if (y * 16 > canvas.height && Math.random() > 0.975) drops[i] = 0;
+      drops[i]++;
+    });
+  }
+  setInterval(drawMatrix, 60);
+}
+
+// ── 4. ГЛИТЧ на заголовке ──
+function glitchEffect() {
+  const title = document.querySelector('.logo-title');
+  if (!title) return;
+  const original = 'DRONESYNC';
+  const glitchChars = '!@#$%^&*<>[]{}';
+
+  function doGlitch() {
+    let iter = 0;
+    const interval = setInterval(() => {
+      title.textContent = original.split('').map((c, i) =>
+        i < iter ? c : glitchChars[Math.floor(Math.random() * glitchChars.length)]
+      ).join('');
+      iter++;
+      if (iter > original.length) {
+        title.textContent = original;
+        clearInterval(interval);
+      }
+    }, 40);
+  }
+
+  doGlitch();
+  setInterval(doGlitch, 8000 + Math.random() * 4000);
+}
+
+// ── 5. СЧЁТЧИКИ KPI анимируются при загрузке ──
+function animateCounters() {
+  document.querySelectorAll('.kpi-v').forEach(el => {
+    const target = parseFloat(el.textContent);
+    if (isNaN(target) || el.textContent === '—') return;
+    let current = 0;
+    const step = target / 30;
+    const isFloat = el.textContent.includes('.');
+    const interval = setInterval(() => {
+      current += step;
+      if (current >= target) { current = target; clearInterval(interval); }
+      el.textContent = isFloat ? current.toFixed(1) : Math.floor(current);
+    }, 30);
+  });
+}
+
+// ── 6. ВСПЫШКА РАДАРА при новых данных ──
+function radarFlash() {
+  const radar = document.querySelector('.radar');
+  if (!radar) return;
+  radar.style.filter = 'brightness(3)';
+  setTimeout(() => radar.style.filter = '', 200);
+}
+
+// ── ЗАПУСК ──
+window.addEventListener('load', () => {
+  drawRoutes();
+  animateDrones();
+  createMatrix();
+  glitchEffect();
+  animateCounters();
+  setTimeout(radarFlash, 2000);
+  setInterval(radarFlash, 15000);
+});
+
 window.addEventListener('resize', drawRoutes);
 
-// Терминал — автоскролл
+// Терминал автоскролл
 const term = document.getElementById('terminal');
 if (term) term.scrollTop = term.scrollHeight;
 
