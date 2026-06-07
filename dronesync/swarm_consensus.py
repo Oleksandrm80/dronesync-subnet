@@ -87,3 +87,48 @@ class SwarmConsensus:
             "log_hash": log_hash,
             "on_chain_ready": True
         }
+    def emergency_stop_all(self, reason: str) -> dict:
+        """Emergency override — stop all drones immediately without voting."""
+        return {
+            "action": "EMERGENCY_STOP",
+            "reason": reason,
+            "affected_drones": [d for d in self.drone_ids if d not in self.blacklist],
+            "timestamp": int(time.time()),
+            "override": True
+        }
+
+    def weighted_vote(self, mission_id: str, 
+                      votes: list, weights: dict) -> dict:
+        """
+        Weighted voting — experienced drones have more influence.
+        votes: list of (drone_id, True/False)
+        weights: dict of {drone_id: weight_float}
+        """
+        active_drones = [d for d in self.drone_ids if d not in self.blacklist]
+        total_weight = sum(weights.get(d, 1.0) for d in active_drones)
+        if total_weight == 0:
+            return {"status": "REJECTED", "reason": "no_weight"}
+
+        approval_weight = sum(
+            weights.get(drone_id, 1.0) 
+            for drone_id, vote in votes 
+            if vote and drone_id not in self.blacklist
+        )
+        approval_rate = approval_weight / total_weight
+
+        result = {
+            "mission_id": mission_id,
+            "approval_rate": round(approval_rate, 2),
+            "status": "APPROVED" if approval_rate >= self.QUORUM else "REJECTED",
+            "weighted": True,
+            "timestamp": int(time.time())
+        }
+        self.votes_log.append(result)
+        return result
+
+    def unblacklist_drone(self, drone_id: str, reason: str) -> dict:
+        """Restore a previously blacklisted drone after verification."""
+        if drone_id in self.blacklist:
+            self.blacklist.remove(drone_id)
+            return {"status": "RESTORED", "drone_id": drone_id, "reason": reason}
+        return {"status": "NOT_BLACKLISTED", "drone_id": drone_id}

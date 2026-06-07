@@ -132,3 +132,31 @@ class EmergencyOverride:
             "status_hash": status_hash,
             "on_chain_ready": True
         }
+    def resolve_emergency(self, emergency_id: str) -> dict:
+        """Mark emergency as resolved."""
+        for e in self.active_emergencies:
+            if e["emergency_id"] == emergency_id:
+                e["status"] = "RESOLVED"
+                e["resolved_at"] = int(time.time())
+                return {"status": "RESOLVED", "emergency_id": emergency_id}
+        return {"status": "NOT_FOUND", "emergency_id": emergency_id}
+
+    def get_active_for_location(self, lat: float, lon: float) -> list:
+        """Return all active emergencies near a given location."""
+        import math
+        nearby = []
+        for e in self.active_emergencies:
+            if e["status"] != "ACTIVE":
+                continue
+            elat = e["location"]["lat"]
+            elon = e["location"]["lon"]
+            dlat = math.radians(lat - elat)
+            dlon = math.radians(lon - elon)
+            a = (math.sin(dlat/2)**2 +
+                 math.cos(math.radians(lat)) *
+                 math.cos(math.radians(elat)) *
+                 math.sin(dlon/2)**2)
+            dist = 6371000 * 2 * math.atan2(math.sqrt(a), math.sqrt(1-a))
+            if dist <= e["radius_m"]:
+                nearby.append({**e, "distance_m": round(dist, 1)})
+        return nearby

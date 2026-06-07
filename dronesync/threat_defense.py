@@ -205,3 +205,34 @@ class ThreatDefense:
         a = (math.sin(dphi/2)**2 +
              math.cos(phi1) * math.cos(phi2) * math.sin(dlambda/2)**2)
         return R * 2 * math.atan2(math.sqrt(a), math.sqrt(1-a))
+    def log_threat(self, threat_type: str, severity: str, 
+                   drone_id: str, details: dict) -> dict:
+        """Log threat event for on-chain record."""
+        entry = {
+            "threat_id": hashlib.sha256(
+                f"{drone_id}{threat_type}{time.time()}".encode()
+            ).hexdigest()[:16],
+            "threat_type": threat_type,
+            "severity": severity,
+            "drone_id": drone_id,
+            "details": details,
+            "timestamp": int(time.time())
+        }
+        self.threat_log.append(entry)
+        return entry
+
+    def get_threat_report(self) -> dict:
+        """Return full threat report for on-chain submission."""
+        report_hash = hashlib.sha256(
+            str(self.threat_log).encode()
+        ).hexdigest()
+        return {
+            "total_threats": len(self.threat_log),
+            "blocked_sessions": len(self.blocked_sessions),
+            "critical": sum(1 for t in self.threat_log 
+                           if t["severity"] == "CRITICAL"),
+            "high": sum(1 for t in self.threat_log 
+                       if t["severity"] == "HIGH"),
+            "report_hash": report_hash,
+            "on_chain_ready": True
+        }

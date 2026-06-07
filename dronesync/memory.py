@@ -81,3 +81,64 @@ class DroneMemory:
             return "MEDIUM"
         else:
             return "LOW"
+    def learn_from_failure(self, mission_id: str, reason: str, 
+                           lat: float, lon: float):
+        """Record mission failure to avoid repeating mistakes."""
+        self.dangerous_zones.append({
+            "lat": lat,
+            "lon": lon,
+            "reason": reason,
+            "mission_id": mission_id,
+            "timestamp": int(time.time())
+        })
+
+    def recommend_action(self, lat: float, lon: float, 
+                         wind_ms: float = 0.0) -> str:
+        """Recommend action based on accumulated experience."""
+        if self.is_zone_dangerous(lat, lon):
+            return "HOVER"
+        if wind_ms > 10.0:
+            return "LAND"
+        if self.missions_completed > 50:
+            return "PROCEED"
+        return "PROCEED_WITH_CAUTION"
+
+    def get_experience_level(self) -> str:
+        """Return drone experience tier."""
+        if self.missions_completed >= 100:
+            return "VETERAN"
+        elif self.missions_completed >= 50:
+            return "EXPERT"
+        elif self.missions_completed >= 20:
+            return "EXPERIENCED"
+        else:
+            return "ROOKIE"
+
+    def save_to_file(self, path: str):
+        """Persist memory to disk."""
+        import json
+        import os
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        with open(path, "w") as f:
+            json.dump({
+                "drone_id": self.drone_id,
+                "dangerous_zones": self.dangerous_zones,
+                "wind_patterns": self.wind_patterns,
+                "obstacle_encounters": self.obstacle_encounters,
+                "total_flight_hours": self.total_flight_hours,
+                "missions_completed": self.missions_completed
+            }, f, indent=2)
+
+    def load_from_file(self, path: str):
+        """Load memory from disk."""
+        import json
+        import os
+        if not os.path.exists(path):
+            return
+        with open(path) as f:
+            data = json.load(f)
+        self.dangerous_zones = data.get("dangerous_zones", [])
+        self.wind_patterns = data.get("wind_patterns", [])
+        self.obstacle_encounters = data.get("obstacle_encounters", [])
+        self.total_flight_hours = data.get("total_flight_hours", 0.0)
+        self.missions_completed = data.get("missions_completed", 0)
