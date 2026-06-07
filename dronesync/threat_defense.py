@@ -152,17 +152,18 @@ class ThreatDefense:
         }
 
     def full_threat_assessment(self, positions: list,
+                                drone_id: str = "drone_0",
+                                mission_id: str = "mission",
                                 signal_strength: float = 0.9) -> dict:
         """Complete threat assessment combining all checks."""
         gps_result = self.analyze_gps_pattern(positions)
         jamming_result = self.check_jamming(signal_strength)
 
         peer_sig = hashlib.sha256(
-    f"drone_0missiondronesync".encode()
-).hexdigest()
+            f"{drone_id}{mission_id}dronesync".encode()
+        ).hexdigest()
         swarm_result = self.verify_swarm_peer(
-            "drone_0", peer_sig, "mission"
-        )
+            drone_id, peer_sig, mission_id )
 
         threats_found = (
             gps_result["gps_threats"] > 0 or

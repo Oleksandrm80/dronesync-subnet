@@ -16,7 +16,7 @@ class GPSSpoofingDetector:
     Flags impossible speed changes, teleportation, and signal patterns.
     """
 
-    MAX_SPEED_MS = 500.0        # max drone speed 30 m/s
+    MAX_SPEED_MS = 500.0        # spoofing threshold: above this = teleportation attack
     MAX_ALT_CHANGE = 20.0      # max altitude change per step (meters)
     MIN_GPS_ACCURACY = 10.0    # meters - worse than this is suspicious
 

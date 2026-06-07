@@ -21,6 +21,7 @@ class DroneFirewall:
         self.blocked_log = []
         self.allowed_log = []
         self._command_times = []
+        self.trusted_sources = set()
 
     def filter(self, command: dict) -> dict:
         """

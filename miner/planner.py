@@ -125,10 +125,6 @@ class DronePlanner:
 
 
 # Для теста
-if __name__ == "__main__":
-    planner = DronePlanner()
-    # Здесь можно будет протестировать
-    print("DronePlanner loaded successfully")
 class AIPlanner:
     """
     AI-enhanced trajectory planner.
@@ -219,3 +215,9 @@ class AIPlanner:
     def _optimized_speed(self, base_speed: float) -> float:
         """Optimize speed based on efficiency weight."""
         return round(base_speed * (1 + self.learned_weights["efficiency"] * 0.2), 2)
+
+
+if __name__ == "__main__":
+    planner = DronePlanner()
+    # Здесь можно будет протестировать
+    print("DronePlanner loaded successfully")

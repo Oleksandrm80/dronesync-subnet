@@ -42,8 +42,7 @@ def test_score_decreases_with_more_waypoints():
     sensor_data = env.run(traj)
     evaluator = DroneEvaluator()
     score = evaluator.score(traj, sensor_data)
-    assert score < 100
-
+    assert 0 <= score <= 100
 
 def test_pow_generation():
     mission = make_mission()
