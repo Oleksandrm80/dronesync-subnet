@@ -63,3 +63,41 @@ class DroneLastWill:
             battery_pct=2.1,
             mission_id=mission_id
         )
+    def generate_recovery_plan(self, last_position: list, 
+                                battery_pct: float) -> dict:
+        """Generate recovery instructions for ground crew."""
+        if battery_pct < 5.0:
+            action = "IMMEDIATE_RETRIEVAL"
+        elif battery_pct < 15.0:
+            action = "PRIORITY_RETRIEVAL"
+        else:
+            action = "SCHEDULED_RETRIEVAL"
+
+        return {
+            "drone_id": self.drone_id,
+            "recovery_action": action,
+            "location": {
+                "lat": last_position[0],
+                "lon": last_position[1],
+                "alt": last_position[2]
+            },
+            "battery_pct": battery_pct,
+            "timestamp": int(time.time()),
+            "estimated_retrieval_window_hours": 1 if battery_pct < 5.0 else 4
+        }
+
+    def full_diagnostics(self, last_position: list, failure_cause: str,
+                          battery_pct: float, mission_id: str,
+                          sensor_data: dict = None) -> dict:
+        """Full diagnostics report combining last will and recovery plan."""
+        will = self.trigger(last_position, failure_cause, 
+                           battery_pct, mission_id)
+        recovery = self.generate_recovery_plan(last_position, battery_pct)
+        return {
+            "last_will": will,
+            "recovery_plan": recovery,
+            "sensor_snapshot": sensor_data or {},
+            "diagnostic_hash": hashlib.sha256(
+                str(will).encode()
+            ).hexdigest()[:16]
+        }

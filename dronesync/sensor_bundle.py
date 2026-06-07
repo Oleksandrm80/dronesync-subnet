@@ -99,3 +99,16 @@ class SensorBundle:
             str(popw_record["score"]) + "|" +
             popw_record["attestation"]["attestation_hash"][:16]
         )
+    def pack_batch(self, bundles: list) -> dict:
+        """Pack multiple mission bundles into one batch for chain submission."""
+        batch_hash = hashlib.sha256(
+            json.dumps([b["bundle_hash"] for b in bundles]).encode()
+        ).hexdigest()
+        return {
+            "batch_size": len(bundles),
+            "mission_ids": [b["mission_id"] for b in bundles],
+            "bundle_hashes": [b["bundle_hash"] for b in bundles],
+            "batch_hash": batch_hash,
+            "timestamp": int(time.time()),
+            "on_chain_ready": True
+        }
