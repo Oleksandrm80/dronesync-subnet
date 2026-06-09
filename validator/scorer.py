@@ -51,6 +51,8 @@ class MissionScorer:
         violations = sum(1 for p in trajectory
                         if 0 < p[2] < self.MIN_SAFE_ALT)
         score -= min(0.5, violations * 0.05)
+        high_violations = sum(1 for p in trajectory if p[2] > self.MAX_SAFE_ALT)
+        score -= min(0.3, high_violations * 0.05)
         if sensor_readings:
             final_battery = sensor_readings[-1].get("battery_pct", 100)
             if final_battery < self.MIN_BATTERY_LANDING:
@@ -95,8 +97,11 @@ class MissionScorer:
         return max(0.0, 1.0 - min(1.0, (avg_gps - 5) * 0.05))
 class DroneEvaluator(MissionScorer):
     def score(self, trajectory, sensor_data):
-            safety = self._score_safety(trajectory.positions, sensor_data if isinstance(sensor_data, list) else [])
-            return round(safety * 100)
+        readings = sensor_data if isinstance(sensor_data, list) else []
+        safety = self._score_safety(trajectory.positions, readings)
+        sensor_quality = self._score_sensor_quality(readings)
+        total = safety * 0.80 + sensor_quality * 0.20
+        return round(total * 100)
 
     def generate_pow(self, trajectory, steps):
         return {

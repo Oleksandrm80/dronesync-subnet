@@ -7,38 +7,63 @@ import hashlib
 import time
 
 
+TIER_WEIGHTS = {
+    "ELITE":   2.0,
+    "TRUSTED": 1.5,
+    "ACTIVE":  1.0,
+    "ROOKIE":  0.5,
+}
+
+
 class SwarmConsensus:
     """
     Decentralized decision-making for drone swarms.
-    Majority vote required before mission execution.
+    Weighted majority vote required before mission execution.
+    ELITE/TRUSTED votes count more than ROOKIE votes.
     Compromised drones voted out automatically.
     """
 
-    QUORUM = 0.51  # 51% majority required
+    QUORUM = 0.51  # 51% of total weight required
 
     def __init__(self, drone_ids: list):
         self.drone_ids = drone_ids
         self.blacklist = []
         self.votes_log = []
+        self.reputations = {}  # drone_id -> {"score": float, "tier": str}
+
+    def update_reputation(self, drone_id: str, score: float,
+                          tier: str = "ACTIVE"):
+        self.reputations[drone_id] = {"score": score, "tier": tier}
+
+    def _get_weight(self, drone_id: str) -> float:
+        rep = self.reputations.get(drone_id, {})
+        tier = rep.get("tier", "ACTIVE")
+        return TIER_WEIGHTS.get(tier, 1.0)
 
     def vote_on_route(self, mission_id: str,
                       route_safe_votes: list) -> dict:
         """
         Swarm votes on whether route is safe to execute.
         route_safe_votes: list of (drone_id, True/False) tuples.
+        Each vote is weighted by drone tier reputation.
         """
         active_drones = [d for d in self.drone_ids if d not in self.blacklist]
-        total = len(active_drones)
-        if total == 0:
+        if not active_drones:
             return {"status": "REJECTED", "reason": "no_active_drones"}
 
-        approvals = sum(1 for _, vote in route_safe_votes if vote)
-        approval_rate = approvals / total
+        total_weight = sum(self._get_weight(d) for d in active_drones)
+        approval_weight = sum(
+            self._get_weight(drone_id)
+            for drone_id, vote in route_safe_votes
+            if vote and drone_id in active_drones
+        )
+        approval_rate = approval_weight / total_weight if total_weight > 0 else 0.0
 
         result = {
             "mission_id": mission_id,
-            "total_voters": total,
-            "approvals": approvals,
+            "total_voters": len(active_drones),
+            "total_weight": round(total_weight, 2),
+            "approval_weight": round(approval_weight, 2),
             "approval_rate": round(approval_rate, 2),
             "status": "APPROVED" if approval_rate >= self.QUORUM else "REJECTED",
             "timestamp": int(time.time())
@@ -54,12 +79,16 @@ class SwarmConsensus:
         """
         active_drones = [d for d in self.drone_ids
                          if d not in self.blacklist and d != suspect_drone_id]
-        total = len(active_drones)
-        if total == 0:
+        if not active_drones:
             return {"status": "REJECTED", "reason": "no_active_drones"}
 
-        votes_for = sum(1 for _, vote in blacklist_votes if vote)
-        vote_rate = votes_for / total
+        total_weight = sum(self._get_weight(d) for d in active_drones)
+        weight_for = sum(
+            self._get_weight(drone_id)
+            for drone_id, vote in blacklist_votes
+            if vote and drone_id in active_drones
+        )
+        vote_rate = weight_for / total_weight if total_weight > 0 else 0.0
 
         if vote_rate >= self.QUORUM:
             if suspect_drone_id not in self.blacklist:
@@ -70,8 +99,9 @@ class SwarmConsensus:
 
         return {
             "suspect": suspect_drone_id,
-            "total_voters": total,
-            "votes_for_blacklist": votes_for,
+            "total_voters": len(active_drones),
+            "total_weight": round(total_weight, 2),
+            "weight_for_blacklist": round(weight_for, 2),
             "vote_rate": round(vote_rate, 2),
             "status": status,
             "timestamp": int(time.time())
@@ -87,48 +117,3 @@ class SwarmConsensus:
             "log_hash": log_hash,
             "on_chain_ready": True
         }
-    def emergency_stop_all(self, reason: str) -> dict:
-        """Emergency override — stop all drones immediately without voting."""
-        return {
-            "action": "EMERGENCY_STOP",
-            "reason": reason,
-            "affected_drones": [d for d in self.drone_ids if d not in self.blacklist],
-            "timestamp": int(time.time()),
-            "override": True
-        }
-
-    def weighted_vote(self, mission_id: str, 
-                      votes: list, weights: dict) -> dict:
-        """
-        Weighted voting — experienced drones have more influence.
-        votes: list of (drone_id, True/False)
-        weights: dict of {drone_id: weight_float}
-        """
-        active_drones = [d for d in self.drone_ids if d not in self.blacklist]
-        total_weight = sum(weights.get(d, 1.0) for d in active_drones)
-        if total_weight == 0:
-            return {"status": "REJECTED", "reason": "no_weight"}
-
-        approval_weight = sum(
-            weights.get(drone_id, 1.0) 
-            for drone_id, vote in votes 
-            if vote and drone_id not in self.blacklist
-        )
-        approval_rate = approval_weight / total_weight
-
-        result = {
-            "mission_id": mission_id,
-            "approval_rate": round(approval_rate, 2),
-            "status": "APPROVED" if approval_rate >= self.QUORUM else "REJECTED",
-            "weighted": True,
-            "timestamp": int(time.time())
-        }
-        self.votes_log.append(result)
-        return result
-
-    def unblacklist_drone(self, drone_id: str, reason: str) -> dict:
-        """Restore a previously blacklisted drone after verification."""
-        if drone_id in self.blacklist:
-            self.blacklist.remove(drone_id)
-            return {"status": "RESTORED", "drone_id": drone_id, "reason": reason}
-        return {"status": "NOT_BLACKLISTED", "drone_id": drone_id}

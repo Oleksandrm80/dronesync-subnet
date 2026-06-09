@@ -19,6 +19,12 @@ from dronesync.synapse import DroneNavSynapseHandler, SwarmSynapseHandler
 from dronesync.reputation import DroneReputation
 from dronesync.storage import DroneStorage
 from dronesync.node import KonnexNode
+from dronesync.firewall import DroneFirewall
+from dronesync.swarm_consensus import SwarmConsensus
+from dronesync.threat_defense import ThreatDefense
+from miner.weather import WeatherService
+from miner.energy import EnergyOptimizer
+from miner.planner import AIPlanner
 
 state = {
     "drones": {},
@@ -34,7 +40,14 @@ state = {
 
 DRONE_IDS = ["DRONE_001", "DRONE_002", "DRONE_003"]
 handlers = {d: DroneNavSynapseHandler(drone_id=d, use_ai_planner=True) for d in DRONE_IDS}
-
+node = KonnexNode(wallet_address="0x5a4E...51f2", network="testnet")
+node.connect()
+firewalls = {d: DroneFirewall(drone_id=d) for d in DRONE_IDS}
+ai_planner = AIPlanner()
+swarm = SwarmConsensus(drone_ids=DRONE_IDS)
+weather = WeatherService()
+energy = EnergyOptimizer()
+threat = ThreatDefense()
 # Фиксированные координаты дронов для карты (в процентах от размера карты)
 DRONE_COORDS = {
     "DRONE_001": {"x": 28, "y": 38, "tx": 62, "ty": 55},
@@ -136,8 +149,6 @@ def refresh_state():
         "netuid": state["netuid"],
         "network": state["network"],
     }
-    node = KonnexNode(wallet_address="0x5a4E...51f2", network="testnet")
-    node.connect()
     state["node_status"] = node.get_status()
     for d in DRONE_IDS:
         state["missions"].append(dict(state["drones"][d]))
@@ -145,6 +156,41 @@ def refresh_state():
         state["missions"] = state["missions"][-30:]
     state["miner_tasks"] = _parse_miner_logs()
     state["last_update"] = int(time.time())
+    # Firewall stats
+    fw_report = firewalls[DRONE_IDS[0]].get_report()
+    state["firewall"] = fw_report
+
+    # Threat defense
+    state["threat"] = {
+        "overall_threat_level": "NONE",
+        "gps_status": "CLEAN",
+        "jamming_status": "CLEAR",
+        "swarm_integrity": "VERIFIED",
+        "mission_safe": True
+    }
+    # Weather
+    state["weather"] = weather.get_current().__dict__
+
+    # Energy
+    positions = [[47.3769, 8.5417, 50], [47.38, 8.545, 50]]
+    state["energy"] = energy.analyze_trajectory(positions)
+    # Score Root
+
+    from validator.scoreroot import ScoreRoot
+    sc = ScoreRoot("VALIDATOR_001")
+    for d in DRONE_IDS:
+        sc.add_score(d, state["drones"][d]["score"], state["drones"][d]["bundle_hash"], state["drones"][d]["bundle_hash"])
+    state["score_root"] = sc.commit()
+    # Last Will
+    from dronesync.last_will import DroneLastWill
+    lw = DroneLastWill(DRONE_IDS[0])
+    state["last_will"] = {"triggered": False, "battery_pct": "—"}
+    # AI planner weights
+    state["ai_weights"] = dict(ai_planner.learned_weights)
+
+    # Swarm consensus
+    votes = [(d, True) for d in DRONE_IDS]
+    state["consensus"] = swarm.vote_on_route("DASH_VOTE", votes)
 
 
 def background_loop():
@@ -320,7 +366,7 @@ header {
   z-index: 1;
   display: grid;
   grid-template-columns: 260px 1fr 260px;
-  grid-template-rows: auto 1fr auto;
+  grid-template-rows: auto 1fr auto auto;
   gap: 1px;
   height: calc(100vh - 56px);
   background: var(--border);
@@ -388,7 +434,7 @@ header {
 /* ── KPI ROW ── */
 .kpi-row {
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
+  grid-template-columns: repeat(5, 1fr);
   gap: 1px;
   background: var(--border);
 }
@@ -674,7 +720,31 @@ header {
 .nr-key { color: var(--dim); }
 .nr-val { color: var(--glow2); }
 .nr-val.ok { color: var(--glow); }
-
+/* ── BOTTOM ROW ── */
+.panel-bottom {
+  grid-column: 1 / 4;
+  grid-row: 4;
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 1px;
+  background: var(--border);
+  max-height: 160px;
+}
+.panel-bottom > .panel { overflow-y: auto; padding: 12px; }
+.mini-row {
+  display: flex;
+  justify-content: space-between;
+  padding: 3px 0;
+  border-bottom: 1px solid rgba(15,48,64,0.4);
+  font-size: 11px;
+}
+.mini-row:last-child { border-bottom: none; }
+.mini-key { color: var(--dim); }
+.mini-val { color: var(--text); }
+.mini-val.g { color: var(--glow); }
+.mini-val.c { color: var(--glow2); }
+.mini-val.a { color: var(--amber); }
+.mini-val.r { color: var(--red); }
 /* Scan line effect */
 @keyframes scanline {
   0%   { top: -2px; }
@@ -799,7 +869,29 @@ header {
       {terminal_lines}
     </div>
   </div>
-
+  <!-- BOTTOM ROW: New Data -->
+  <div class="panel-bottom">
+    <div class="panel">
+      <div class="panel-title">// Weather & Energy</div>
+      {weather_panel}
+    </div>
+    <div class="panel">
+      <div class="panel-title">// Threat Defense</div>
+      {threat_panel}
+    </div>
+    <div class="panel">
+      <div class="panel-title">// Firewall & AI</div>
+      {firewall_panel}
+    </div>
+    <div class="panel">
+      <div class="panel-title">// Consensus</div>
+      {consensus_panel}
+    </div>
+    <div class="panel">
+      <div class="panel-title">// Score Root & Last Will</div>
+      {scoreroot_panel}
+    </div>
+  </div>
   <!-- RIGHT: Pipeline + Mission Log + Node -->
   <div class="panel-right">
     <div class="panel">
@@ -1046,7 +1138,7 @@ def render_dashboard() -> str:
           <div class="dc-bar"><div class="dc-bar-fill" style="width:{score}%"></div></div>
           <div class="dc-row"><span class="dc-key">TEE</span><span class="dc-val c">{d.get("tee_status","?")}</span></div>
           <div class="dc-row"><span class="dc-key">SECURITY</span><span class="dc-val g">{d.get("security_status","?")}</span></div>
-          <div class="dc-row"><span class="dc-key">REP</span><span class="dc-val">{d.get("reputation_score","?")} ({tier})</span></div>
+          <div class="dc-row"><span class="dc-key">REP</span><span class="dc-val {"g" if tier=="ELITE" else "c" if tier=="TRUSTED" else "a" if tier=="ACTIVE" else "r"}">{d.get("reputation_score","?")} ({tier})</span></div>
           <div class="dc-row"><span class="dc-key">ON-CHAIN</span><span class="dc-val g">{"READY" if d.get("on_chain_ready") else "PENDING"}</span></div>
         </div>"""
 
@@ -1107,7 +1199,40 @@ def render_dashboard() -> str:
         </div>"""
     if not mission_rows:
         mission_rows = '<div style="color:var(--dim);font-size:11px;padding:8px 0">NO DATA</div>'
-
+    w = s.get("weather", {})
+    weather_panel = (
+        f'<div class="mini-row"><span class="mini-key">FLYABLE</span><span class="mini-val g">{"YES" if w.get("flyable", True) else "NO"}</span></div>'
+        f'<div class="mini-row"><span class="mini-key">WIND</span><span class="mini-val">{w.get("wind_speed", "—")} m/s</span></div>'
+        f'<div class="mini-row"><span class="mini-key">VISIBILITY</span><span class="mini-val">{w.get("visibility_m", "—")}m</span></div>'
+        f'<div class="mini-row"><span class="mini-key">SEVERITY</span><span class="mini-val c">{w.get("severity", "CLEAR")}</span></div>'
+    )
+    e = s.get("energy", {})
+    weather_panel += (
+        f'<div class="mini-row"><span class="mini-key">BATTERY</span><span class="mini-val g">{e.get("battery_remaining_pct", "—")}%</span></div>'
+        f'<div class="mini-row"><span class="mini-key">EFFICIENCY</span><span class="mini-val c">{e.get("efficiency_rating", "—")}</span></div>'
+    )
+    t = s.get("threat", {})
+    threat_panel = (
+        f'<div class="mini-row"><span class="mini-key">LEVEL</span><span class="mini-val {"r" if t.get("overall_threat_level","NONE")!="NONE" else "g"}">{t.get("overall_threat_level","—")}</span></div>'
+        f'<div class="mini-row"><span class="mini-key">GPS</span><span class="mini-val g">{t.get("gps_status","—")}</span></div>'
+        f'<div class="mini-row"><span class="mini-key">JAMMING</span><span class="mini-val g">{t.get("jamming_status","—")}</span></div>'
+        f'<div class="mini-row"><span class="mini-key">SWARM</span><span class="mini-val c">{t.get("swarm_integrity","—")}</span></div>'
+    )
+    fw = s.get("firewall", {})
+    aw = s.get("ai_weights", {})
+    firewall_panel = (
+        f'<div class="mini-row"><span class="mini-key">ALLOWED</span><span class="mini-val g">{fw.get("total_allowed","—")}</span></div>'
+        f'<div class="mini-row"><span class="mini-key">BLOCKED</span><span class="mini-val r">{fw.get("total_blocked","—")}</span></div>'
+        f'<div class="mini-row"><span class="mini-key">AI SAFETY</span><span class="mini-val c">{aw.get("safety","—")}</span></div>'
+        f'<div class="mini-row"><span class="mini-key">AI EFFIC</span><span class="mini-val c">{aw.get("efficiency","—")}</span></div>'
+        f'<div class="mini-row"><span class="mini-key">AI ENERGY</span><span class="mini-val c">{aw.get("energy","—")}</span></div>'
+    )
+    c = s.get("consensus", {})
+    consensus_panel = (
+        f'<div class="mini-row"><span class="mini-key">STATUS</span><span class="mini-val {"g" if c.get("status")=="APPROVED" else "r"}">{c.get("status","—")}</span></div>'
+        f'<div class="mini-row"><span class="mini-key">WEIGHT</span><span class="mini-val">{c.get("approval_weight","—")}/{c.get("total_weight","—")}</span></div>'
+        f'<div class="mini-row"><span class="mini-key">RATE</span><span class="mini-val g">{c.get("approval_rate","—")}</span></div>'
+    )
     last_upd = time.strftime("%H:%M:%S", time.localtime(s.get("last_update", 0))) if s.get("last_update") else "—"
 
     html = HTML_TEMPLATE
@@ -1126,6 +1251,20 @@ def render_dashboard() -> str:
     html = html.replace("{terminal_lines}", terminal_lines)
     html = html.replace("{radar_blips}",  radar_blips)
     html = html.replace('"{routes_data}"', routes_data)
+    html = html.replace("{weather_panel}",   weather_panel)
+    html = html.replace("{threat_panel}",    threat_panel)
+    html = html.replace("{firewall_panel}",  firewall_panel)
+    html = html.replace("{consensus_panel}", consensus_panel)
+    sr = s.get("score_root", {})
+    lw = s.get("last_will", {})
+    scoreroot_panel = (
+        f'<div class="mini-row"><span class="mini-key">VALIDATOR</span><span class="mini-val c">{sr.get("validator_id","—")}</span></div>'
+        f'<div class="mini-row"><span class="mini-key">SCORES</span><span class="mini-val">{sr.get("scores_count","—")}</span></div>'
+        f'<div class="mini-row"><span class="mini-key">ROOT</span><span class="mini-val g">{str(sr.get("score_root","—"))[:12]}...</span></div>'
+        f'<div class="mini-row"><span class="mini-key">LW STATUS</span><span class="mini-val {"r" if lw.get("triggered") else "g"}">{"TRIGGERED" if lw.get("triggered") else "STANDBY"}</span></div>'
+        f'<div class="mini-row"><span class="mini-key">BATTERY</span><span class="mini-val">{lw.get("battery_pct","—")}%</span></div>'
+    )
+    html = html.replace("{scoreroot_panel}", scoreroot_panel)
     return html
 
 

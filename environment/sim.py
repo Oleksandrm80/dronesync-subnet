@@ -128,8 +128,9 @@ class SwarmEnvironment:
         Returns list of maneuvers applied.
         """
         maneuvers = []
-        for step, pos in enumerate(my_positions):
+        for step in range(len(my_positions)):
             for other_traj in other_trajectories:
+                pos = my_positions[step]  # re-read after each update
                 other_pos = other_traj[min(step, len(other_traj) - 1)]
                 dist = self._haversine(
                     pos[0], pos[1], other_pos[0], other_pos[1]
@@ -137,7 +138,6 @@ class SwarmEnvironment:
                 if dist < self.SAFE_DISTANCE_M:
                     alt_separation = abs(pos[2] - other_pos[2])
                     if alt_separation < 10:
-                        # Apply altitude adjustment in-place
                         my_positions[step] = [
                             pos[0], pos[1], pos[2] + 10, pos[3]
                         ]

@@ -95,11 +95,11 @@ class EnergyOptimizer:
         return float(best_speed)
 
     def _efficiency_rating(self, battery_pct: float) -> str:
-        if battery_pct >= 60:
+        if battery_pct < 20:
             return "EXCELLENT"
-        elif battery_pct >= 40:
+        elif battery_pct < 40:
             return "GOOD"
-        elif battery_pct >= 20:
+        elif battery_pct < 60:
             return "ACCEPTABLE"
         return "POOR"
     def _recommendation(self, remaining_pct: float) -> str:

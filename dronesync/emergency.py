@@ -40,6 +40,7 @@ class EmergencyOverride:
         self.active_emergencies = []
         self.redirected_drones = []
         self.protected_drones = []
+        self._emergency_counter = 0
 
     def broadcast_emergency(self, emergency_type: str, location: dict,
                              authority_id: str) -> dict:
@@ -48,8 +49,9 @@ class EmergencyOverride:
 
         config = EMERGENCY_TYPES[emergency_type]
         timestamp = int(time.time())
+        self._emergency_counter += 1
         emergency = {
-            "emergency_id": "EMG_" + str(timestamp),
+            "emergency_id": "EMG_" + str(timestamp) + "_" + str(self._emergency_counter),
             "type": emergency_type,
             "location": location,
             "authority_id": authority_id,

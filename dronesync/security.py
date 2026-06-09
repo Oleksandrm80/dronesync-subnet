@@ -8,6 +8,84 @@ import hmac
 import time
 import math
 import json
+import os
+
+
+class Ed25519Signer:
+    """
+    Ed25519 digital signatures for PoPW records.
+    Each drone generates a keypair on init.
+    Validator verifies signature before accepting PoPW.
+    Ed25519 chosen over RSA: faster, smaller keys, safe by default.
+    """
+
+    def __init__(self):
+        try:
+            from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
+            from cryptography.hazmat.primitives.serialization import (
+                Encoding, PublicFormat, PrivateFormat, NoEncryption
+            )
+            self._private_key = Ed25519PrivateKey.generate()
+            self._public_key = self._private_key.public_key()
+            pub_bytes = self._public_key.public_bytes(Encoding.Raw, PublicFormat.Raw)
+            self.public_key_hex = pub_bytes.hex()
+            self._backend = "cryptography"
+        except ImportError:
+            # Fallback: HMAC-SHA256 симуляция если cryptography не установлен
+            self._secret = os.urandom(32)
+            self.public_key_hex = self._secret.hex()
+            self._backend = "hmac_fallback"
+
+    def sign(self, data: bytes) -> str:
+        """Sign bytes, return hex signature."""
+        if self._backend == "cryptography":
+            sig = self._private_key.sign(data)
+            return sig.hex()
+        else:
+            return hmac.new(self._secret, data, hashlib.sha256).hexdigest()
+
+    def verify(self, data: bytes, signature_hex: str,
+               public_key_hex: str = None) -> bool:
+        """Verify signature. Uses own public key if none provided."""
+        if self._backend == "cryptography":
+            try:
+                from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PublicKey
+                from cryptography.hazmat.primitives.serialization import Encoding, PublicFormat
+                from cryptography.exceptions import InvalidSignature
+                if public_key_hex is None:
+                    pub_key = self._public_key
+                else:
+                    pub_bytes = bytes.fromhex(public_key_hex)
+                    pub_key = Ed25519PublicKey.from_public_bytes(pub_bytes)
+                pub_key.verify(bytes.fromhex(signature_hex), data)
+                return True
+            except Exception:
+                return False
+        else:
+            expected = hmac.new(self._secret, data, hashlib.sha256).hexdigest()
+            return hmac.compare_digest(signature_hex, expected)
+
+    def sign_popw(self, popw_hash: str, mission_id: str) -> dict:
+        """Sign a PoPW record hash. Returns signature bundle."""
+        payload = f"{mission_id}:{popw_hash}".encode()
+        signature = self.sign(payload)
+        return {
+            "mission_id": mission_id,
+            "popw_hash": popw_hash,
+            "signature": signature,
+            "public_key": self.public_key_hex,
+            "backend": self._backend,
+            "signed_at": int(time.time())
+        }
+
+    def verify_popw(self, sig_bundle: dict) -> bool:
+        """Verify a PoPW signature bundle."""
+        payload = f"{sig_bundle['mission_id']}:{sig_bundle['popw_hash']}".encode()
+        return self.verify(
+            data=payload,
+            signature_hex=sig_bundle["signature"],
+            public_key_hex=sig_bundle.get("public_key")
+        )
 
 
 class GPSSpoofingDetector:
@@ -16,7 +94,7 @@ class GPSSpoofingDetector:
     Flags impossible speed changes, teleportation, and signal patterns.
     """
 
-    MAX_SPEED_MS = 500.0        # spoofing threshold: above this = teleportation attack
+    MAX_SPEED_MS = 200.0       # max drone speed — above this is teleportation
     MAX_ALT_CHANGE = 20.0      # max altitude change per step (meters)
     MIN_GPS_ACCURACY = 10.0    # meters - worse than this is suspicious
 
@@ -30,7 +108,6 @@ class GPSSpoofingDetector:
             prev = positions[i-1]
             curr = positions[i]
 
-            # Check impossible speed
             dist = self._haversine(prev[0], prev[1], curr[0], curr[1])
             time_delta = max(curr[3] - prev[3], 0.1) if len(curr) > 3 else 1.0
             speed = dist / time_delta
@@ -43,7 +120,6 @@ class GPSSpoofingDetector:
                     "severity": "HIGH"
                 })
 
-            # Check altitude jump
             alt_change = abs(curr[2] - prev[2])
             if alt_change > self.MAX_ALT_CHANGE:
                 alerts.append({
@@ -102,17 +178,14 @@ class CommandSigner:
         received_sig = signed_command.get("signature", "")
         nonce = command.get("nonce", "")
 
-        # Reject replay attacks
         if nonce in self.nonce_cache:
             return False
         self.nonce_cache.add(nonce)
 
-        # Verify timestamp (reject commands older than 30 seconds)
         cmd_time = command.get("timestamp", 0)
         if abs(time.time() - cmd_time) > 30:
             return False
 
-        # Verify signature
         payload = json.dumps(command, sort_keys=True).encode()
         expected_sig = hmac.new(self.secret, payload, hashlib.sha256).hexdigest()
 
@@ -139,7 +212,6 @@ class AnomalyDetector:
         """Detect if current behavior deviates from baseline."""
         anomalies = []
 
-        # Score anomaly
         if self.baseline_scores:
             avg = sum(self.baseline_scores) / len(self.baseline_scores)
             if current_score < avg * 0.7:
@@ -150,7 +222,6 @@ class AnomalyDetector:
                     "severity": "HIGH"
                 })
 
-        # Trajectory anomaly - sudden direction change
         if len(trajectory) >= 3:
             for i in range(2, len(trajectory)):
                 p1 = trajectory[i-2]
@@ -195,6 +266,7 @@ class DroneSecuritySuite:
         self.spoof_detector = GPSSpoofingDetector()
         self.cmd_signer = CommandSigner()
         self.anomaly_detector = AnomalyDetector()
+        self.ed25519 = Ed25519Signer()
 
     def full_security_check(self, trajectory, score: int) -> dict:
         """Run complete security analysis on mission."""
@@ -218,4 +290,16 @@ class DroneSecuritySuite:
                 "hijacking_suspected"] else "SUSPECTED",
             "threat_level": anomaly_result["threat_level"],
             "mission_cleared": overall_safe
+        }
+
+    def sign_and_verify_popw(self, popw_hash: str, mission_id: str) -> dict:
+        """Sign PoPW hash and immediately verify — confirms key pair works."""
+        sig_bundle = self.ed25519.sign_popw(popw_hash, mission_id)
+        verified = self.ed25519.verify_popw(sig_bundle)
+        return {
+            "signed": True,
+            "verified": verified,
+            "public_key": sig_bundle["public_key"][:16] + "...",
+            "backend": sig_bundle["backend"],
+            "status": "OK" if verified else "SIGNATURE_FAILED"
         }

@@ -154,21 +154,23 @@ class ThreatDefense:
     def full_threat_assessment(self, positions: list,
                                 drone_id: str = "drone_0",
                                 mission_id: str = "mission",
-                                signal_strength: float = 0.9) -> dict:
+                                signal_strength: float = 0.9,
+                                peer_signature: str = None) -> dict:
         """Complete threat assessment combining all checks."""
         gps_result = self.analyze_gps_pattern(positions)
         jamming_result = self.check_jamming(signal_strength)
 
-        peer_sig = hashlib.sha256(
-            f"{drone_id}{mission_id}dronesync".encode()
-        ).hexdigest()
-        swarm_result = self.verify_swarm_peer(
-            drone_id, peer_sig, mission_id )
+        if peer_signature is not None:
+            swarm_result = self.verify_swarm_peer(drone_id, peer_signature, mission_id)
+            swarm_threat = not swarm_result["peer_verified"]
+        else:
+            swarm_result = {"peer_verified": None, "threat": None, "action": "NO_EXTERNAL_SIG"}
+            swarm_threat = False
 
         threats_found = (
             gps_result["gps_threats"] > 0 or
             jamming_result["jamming_detected"] or
-            not swarm_result["peer_verified"]
+            swarm_threat
         )
 
         return {
@@ -176,8 +178,9 @@ class ThreatDefense:
             "gps_status": gps_result["status"],
             "jamming_status": "DETECTED" if jamming_result[
                 "jamming_detected"] else "CLEAR",
-            "swarm_integrity": "VERIFIED" if swarm_result[
-                "peer_verified"] else "COMPROMISED",
+            "swarm_integrity": ("VERIFIED" if swarm_result["peer_verified"]
+                               else "NOT_CHECKED" if swarm_result["peer_verified"] is None
+                               else "COMPROMISED"),
             "mission_safe": not threats_found,
             "total_threats": gps_result["gps_threats"]
         }

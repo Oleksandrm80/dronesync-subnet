@@ -113,7 +113,11 @@ class DronePlanner:
 
     def generate_pow_artifact(self, mission: MissionInstruction, trajectory: Trajectory) -> PoPWArtifact:
         """Создаёт Proof of Physical Work"""
-        data = f"{mission.mission_id}{trajectory.positions[-1]}".encode()
+        import json
+        traj_hash = hashlib.sha256(
+            json.dumps(trajectory.positions, sort_keys=True).encode()
+        ).hexdigest()
+        data = f"{mission.mission_id}{traj_hash}".encode()
         computation_hash = hashlib.sha256(data).hexdigest()
         
         return PoPWArtifact(
@@ -143,9 +147,11 @@ class AIPlanner:
     def plan_trajectory(self, mission) -> Trajectory:
         """Plan trajectory using AI-weighted optimization."""
         import time
+        import hashlib
         positions = []
         velocities = []
         timestamps = []
+        planner_steps = []
 
         current_time = int(time.time())
 
@@ -158,6 +164,7 @@ class AIPlanner:
         ])
         velocities.append(mission.origin.speed)
         timestamps.append(current_time)
+        planner_steps.append({"step": 0, "action": "origin", "lat": mission.origin.lat, "lon": mission.origin.lon, "alt": mission.origin.alt, "timestamp": current_time})
 
         # AI optimization: adjust waypoints based on learned weights
         all_points = mission.waypoints + [mission.destination]
@@ -169,6 +176,10 @@ class AIPlanner:
             positions.append([*optimized_pos, current_time])
             velocities.append(self._optimized_speed(waypoint.speed))
             timestamps.append(current_time)
+            action = "destination" if i == len(all_points) - 1 else "waypoint"
+            planner_steps.append({"step": i+1, "action": action, "lat": optimized_pos[0], "lon": optimized_pos[1], "alt": optimized_pos[2], "timestamp": current_time})
+
+        steps_hash = hashlib.sha256(str(planner_steps).encode()).hexdigest()
 
         trajectory = Trajectory(
             positions=positions,
@@ -178,7 +189,9 @@ class AIPlanner:
                 "planner_version": "ai_v1",
                 "learned_weights": self.learned_weights,
                 "mission_type": mission.mission_type.value,
-                "optimized": True
+                "optimized": True,
+                "planner_steps": planner_steps,
+                "steps_hash": steps_hash
             }
         )
 
@@ -199,6 +212,12 @@ class AIPlanner:
             self.learned_weights["safety"] = min(
                 0.60, self.learned_weights["safety"] + 0.05
             )
+        total = sum(self.learned_weights.values())
+        if total > 0:
+            self.learned_weights = {
+                k: round(v / total, 3)
+                for k, v in self.learned_weights.items()
+            }
 
     def _optimized_step_time(self, step: int, total: int) -> float:
         """Calculate optimal time between waypoints."""

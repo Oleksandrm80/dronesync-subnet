@@ -798,18 +798,18 @@ def test_protected_drones_counted():
     assert eo.get_status()["protected_drones"] == 1
 '''
 
-# Create all files
+# Create all files (skip if already exist)
 created = []
+skipped = []
 for path, content in files.items():
+    if os.path.exists(path):
+        skipped.append(path)
+        continue
     os.makedirs(os.path.dirname(path), exist_ok=True)
     with open(path, "w", encoding="utf-8") as f:
         f.write(content)
     created.append(path)
     print("created: " + path)
 
-print("\nDone! Created " + str(len(created)) + " files.")
-print("Now run:")
-print("  python -m pytest tests/ -v")
-print("  git add .")
-print("  git commit -m 'Add Phase 1+2: Reputation, Firewall, LastWill, Memory, Consensus, Emergency, Storage, SensorBundle, ScoreRoot'")
-print("  git push")
+if skipped:
+    print("\nSkipped (already exist): " + str(len(skipped)) + " files")

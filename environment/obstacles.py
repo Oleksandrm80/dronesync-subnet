@@ -38,8 +38,9 @@ class DynamicObstacleManager:
     SAFE_DISTANCE_M = 50.0
     PREDICTION_TIME_S = 10.0
 
-    def __init__(self):
+    def __init__(self, seed: int = 42):
         self.obstacles = []
+        self._rng = random.Random(seed)
         self._generate_urban_obstacles()
 
     def _generate_urban_obstacles(self):
@@ -52,11 +53,11 @@ class DynamicObstacleManager:
             self.obstacles.append(MovingObstacle(
                 obstacle_id="OBS_" + str(i).zfill(3),
                 obs_type=obs_type,
-                lat=47.3769 + random.uniform(-0.01, 0.01),
-                lon=8.5417 + random.uniform(-0.01, 0.01),
-                alt=random.uniform(30, 100),
-                speed_ms=speed + random.uniform(-2, 2),
-                heading=random.uniform(0, 360)
+                lat=47.3769 + self._rng.uniform(-0.01, 0.01),
+                lon=8.5417 + self._rng.uniform(-0.01, 0.01),
+                alt=self._rng.uniform(30, 100),
+                speed_ms=speed + self._rng.uniform(-2, 2),
+                heading=self._rng.uniform(0, 360)
             ))
 
     def check_trajectory(self, positions: list) -> dict:

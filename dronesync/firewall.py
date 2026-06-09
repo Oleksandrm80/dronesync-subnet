@@ -23,6 +23,11 @@ class DroneFirewall:
         self._command_times = []
         self.trusted_sources = set()
 
+    def add_trusted_source(self, source_id: str) -> dict:
+        """Add a trusted source that bypasses rate limiting and signature checks."""
+        self.trusted_sources.add(source_id)
+        return {"status": "ADDED", "source_id": source_id}
+
     def filter(self, command: dict) -> dict:
         """
         Filter incoming command.
@@ -31,6 +36,12 @@ class DroneFirewall:
         action = command.get("action", "")
         source = command.get("source", "unknown")
         timestamp = command.get("timestamp", 0)
+
+        # Trusted sources bypass all checks
+        if source in self.trusted_sources:
+            entry = {"action": action, "source": source, "timestamp": int(time.time()), "status": "ALLOWED"}
+            self.allowed_log.append(entry)
+            return {"status": "ALLOWED", "action": action}
 
         # Check 1: unknown action
         if action not in self.ALLOWED_ACTIONS:
@@ -76,22 +87,3 @@ class DroneFirewall:
             "log_hash": log_hash,
             "on_chain_ready": True
         }
-    def add_trusted_source(self, source_id: str) -> dict:
-        """Add a trusted source that bypasses rate limiting."""
-        if not hasattr(self, 'trusted_sources'):
-            self.trusted_sources = set()
-        self.trusted_sources.add(source_id)
-        return {"status": "ADDED", "source_id": source_id}
-
-    def remove_trusted_source(self, source_id: str) -> dict:
-        """Remove a source from trusted list."""
-        if hasattr(self, 'trusted_sources'):
-            self.trusted_sources.discard(source_id)
-        return {"status": "REMOVED", "source_id": source_id}
-
-    def clear_logs(self) -> dict:
-        """Clear firewall logs and return summary before clearing."""
-        summary = self.get_report()
-        self.blocked_log = []
-        self.allowed_log = []
-        return {"status": "CLEARED", "summary": summary}

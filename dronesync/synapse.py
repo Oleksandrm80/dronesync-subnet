@@ -25,6 +25,7 @@ from dronesync.firewall import DroneFirewall
 from dronesync.memory import DroneMemory
 from dronesync.storage import DroneStorage
 from dronesync.swarm_consensus import SwarmConsensus
+from miner.weather import WeatherService
 
 
 class MissionAdapter:
@@ -93,6 +94,7 @@ class DroneNavSynapseHandler:
         self.memory = DroneMemory(drone_id=drone_id)
         self.storage = DroneStorage(drone_id=drone_id)
         self.reputation = DroneReputation(drone_id=drone_id)
+        self.weather = WeatherService()
 
     def handle(self, synapse_task: Dict) -> Dict:
         """
@@ -162,10 +164,11 @@ class DroneNavSynapseHandler:
 
         # 9. Обновляем память и репутацию дрона
         mission_safe = security_result.get("mission_cleared", True)
+        current_weather = self.weather.get_current()
         self.memory.record_flight(
             trajectory.positions,
             duration_s=round(time.time() - t_start, 2),
-            wind_ms=3.0,
+            wind_ms=current_weather.wind_speed,
         )
         self.reputation.record_mission(
             mission.mission_id, score, mission_safe, battery_used_pct=7.5
@@ -311,7 +314,7 @@ def demo_synapse():
     print("  swarm_mission_id: " + swarm_response["swarm_mission_id"])
     print("  avg_score:        " + str(swarm_response["avg_score"]))
     print("  swarm_approved:   " + str(swarm_response["swarm_approved"]))
-    print("  consensus_votes:  " + str(swarm_response["consensus"]["approvals"]) +
+    print("  consensus_votes:  " + str(swarm_response["consensus"]["approval_weight"]) +
           "/" + str(swarm_response["consensus"]["total_voters"]))
     print("  on_chain_ready:   " + str(swarm_response["on_chain_ready"]))
     for d, r in swarm_response["drone_results"].items():

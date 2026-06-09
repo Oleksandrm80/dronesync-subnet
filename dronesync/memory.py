@@ -118,7 +118,9 @@ class DroneMemory:
         """Persist memory to disk."""
         import json
         import os
-        os.makedirs(os.path.dirname(path), exist_ok=True)
+        dir_name = os.path.dirname(path)
+        if dir_name:
+            os.makedirs(dir_name, exist_ok=True)       
         with open(path, "w") as f:
             json.dump({
                 "drone_id": self.drone_id,

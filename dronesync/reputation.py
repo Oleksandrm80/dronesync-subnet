@@ -41,6 +41,7 @@ class DroneReputation:
         """Adjust reputation based on mission outcome."""
         if not mission_safe:
             self.score = max(self.MIN_SCORE, self.score - 10)
+            self.tier = self._compute_tier()
             return
         if mission_score >= 95:
             self.score = min(self.MAX_SCORE, self.score + 3)

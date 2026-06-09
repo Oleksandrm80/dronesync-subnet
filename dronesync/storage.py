@@ -25,8 +25,7 @@ class DroneStorage:
 
     def save(self, data: dict):
         """Save drone state to disk."""
-        data["drone_id"] = self.drone_id
-        data["last_saved"] = int(time.time())
+        data = {**data, "drone_id": self.drone_id, "last_saved": int(time.time())}
         with open(self.path, "w", encoding="utf-8") as f:
             json.dump(data, f, indent=2)
 

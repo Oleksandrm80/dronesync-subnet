@@ -397,7 +397,7 @@ def run_swarm_consensus():
     votes = [(d, True) for d in drones[:4]] + [("drone_4", False)]
     result = consensus.vote_on_route("DSYNC_001", votes)
     print("mission_id: DSYNC_001")
-    print("approvals: " + str(result["approvals"]) + "/" + str(result["total_voters"]))
+    print("approval_weight: " + str(result["approval_weight"]) + "/" + str(result["total_weight"]))    
     print("approval_rate: " + str(result["approval_rate"]))
     print("route_status: " + result["status"])
     bl_votes = [(d, True) for d in ["drone_0", "drone_1", "drone_2"]] + [("drone_3", False)]
