@@ -206,6 +206,16 @@ class DroneNavSynapseHandler:
             "reputation": self.reputation.get_status(),
             "popw": record,
             "on_chain_ready": record["on_chain_ready"] and bundle["on_chain_ready"],
+            "proof_package": {
+                "trajectory_hash": record["trajectory_hash"],
+                "sensor_hash": bundle["sensor_hash"],
+                "score": score,
+                "attestation_id": record["attestation"]["attestation_id"],
+                "chain_string": "PROOF|" + mission.mission_id + "|" +
+                    record["trajectory_hash"][:16] + "|" +
+                    bundle["sensor_hash"][:16] + "|" +
+                    str(score),
+            },
             "duration_s": duration,
         }
 

@@ -108,3 +108,30 @@ class DroneSyncSynapse:
             "score": self.score,
             "metadata": self.metadata,
         }
+
+
+class AlertLevel(Enum):
+    CRITICAL = "critical"
+    ALERT = "alert"
+    NOTICE = "notice"
+
+
+@dataclass
+class FlightSegment:
+    from_point: Waypoint
+    to_point: Waypoint
+    segment_index: int
+    planned_duration_s: float = 0.0
+    actual_duration_s: float = 0.0
+    floor_altitude: float = 20.0
+    vertical_clearance: float = 10.0
+
+
+@dataclass
+class NavAlert:
+    level: AlertLevel
+    code: str
+    message: str
+    segment_index: int = 0
+    timestamp: float = field(default_factory=time.time)
+    resolved: bool = False

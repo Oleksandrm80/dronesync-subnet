@@ -1,119 +1,191 @@
 """
 DroneSync - Swarm Consensus
-The swarm votes on route approval and dangerous drone exclusion.
-No central operator — the swarm decides collectively.
+Weighted voting by reputation tier.
+ELITE=4, TRUSTED=3, ACTIVE=2, ROOKIE=1
 """
 import hashlib
 import time
 
-
 TIER_WEIGHTS = {
-    "ELITE":   2.0,
-    "TRUSTED": 1.5,
-    "ACTIVE":  1.0,
-    "ROOKIE":  0.5,
+    "ELITE":   4,
+    "TRUSTED": 3,
+    "ACTIVE":  2,
+    "ROOKIE":  1,
 }
+
+QUORUM = 0.51
 
 
 class SwarmConsensus:
-    """
-    Decentralized decision-making for drone swarms.
-    Weighted majority vote required before mission execution.
-    ELITE/TRUSTED votes count more than ROOKIE votes.
-    Compromised drones voted out automatically.
-    """
-
-    QUORUM = 0.51  # 51% of total weight required
-
     def __init__(self, drone_ids: list):
         self.drone_ids = drone_ids
         self.blacklist = []
         self.votes_log = []
-        self.reputations = {}  # drone_id -> {"score": float, "tier": str}
+        self._reputation: dict = {}
 
-    def update_reputation(self, drone_id: str, score: float,
-                          tier: str = "ACTIVE"):
-        self.reputations[drone_id] = {"score": score, "tier": tier}
+    def register_drone_reputation(self, drone_id: str, tier: str):
+        if tier not in TIER_WEIGHTS:
+            tier = "ROOKIE"
+        self._reputation[drone_id] = tier
 
-    def _get_weight(self, drone_id: str) -> float:
-        rep = self.reputations.get(drone_id, {})
-        tier = rep.get("tier", "ACTIVE")
-        return TIER_WEIGHTS.get(tier, 1.0)
+    def _weight(self, drone_id: str) -> int:
+        return TIER_WEIGHTS.get(self._reputation.get(drone_id, "ROOKIE"), 1)
 
-    def vote_on_route(self, mission_id: str,
-                      route_safe_votes: list) -> dict:
-        """
-        Swarm votes on whether route is safe to execute.
-        route_safe_votes: list of (drone_id, True/False) tuples.
-        Each vote is weighted by drone tier reputation.
-        """
+    def _total_weight(self, drone_list: list) -> int:
+        return sum(self._weight(d) for d in drone_list)
+
+    def vote_on_route(self, mission_id: str, route_safe_votes: list) -> dict:
         active_drones = [d for d in self.drone_ids if d not in self.blacklist]
-        if not active_drones:
+        total_weight = self._total_weight(active_drones)
+
+        if total_weight == 0:
             return {"status": "REJECTED", "reason": "no_active_drones"}
 
-        total_weight = sum(self._get_weight(d) for d in active_drones)
         approval_weight = sum(
-            self._get_weight(drone_id)
+            self._weight(drone_id)
             for drone_id, vote in route_safe_votes
-            if vote and drone_id in active_drones
+            if vote and drone_id not in self.blacklist
         )
-        approval_rate = approval_weight / total_weight if total_weight > 0 else 0.0
+        approval_rate = approval_weight / total_weight
+
+        tier_breakdown = {}
+        for drone_id, vote in route_safe_votes:
+            if drone_id in self.blacklist:
+                continue
+            tier = self._reputation.get(drone_id, "ROOKIE")
+            if tier not in tier_breakdown:
+                tier_breakdown[tier] = {"approve": 0, "reject": 0}
+            if vote:
+                tier_breakdown[tier]["approve"] += 1
+            else:
+                tier_breakdown[tier]["reject"] += 1
 
         result = {
             "mission_id": mission_id,
             "total_voters": len(active_drones),
-            "total_weight": round(total_weight, 2),
-            "approval_weight": round(approval_weight, 2),
-            "approval_rate": round(approval_rate, 2),
-            "status": "APPROVED" if approval_rate >= self.QUORUM else "REJECTED",
+            "total_weight": total_weight,
+            "approval_weight": approval_weight,
+            "approval_rate": round(approval_rate, 3),
+            "status": "APPROVED" if approval_rate >= QUORUM else "REJECTED",
+            "tier_breakdown": tier_breakdown,
             "timestamp": int(time.time())
         }
         self.votes_log.append(result)
         return result
 
-    def vote_blacklist(self, suspect_drone_id: str,
-                       blacklist_votes: list) -> dict:
-        """
-        Swarm votes to blacklist a compromised drone.
-        blacklist_votes: list of (drone_id, True/False) tuples.
-        """
-        active_drones = [d for d in self.drone_ids
-                         if d not in self.blacklist and d != suspect_drone_id]
-        if not active_drones:
+    def vote_blacklist(self, suspect_drone_id: str, blacklist_votes: list) -> dict:
+        active_drones = [
+            d for d in self.drone_ids
+            if d not in self.blacklist and d != suspect_drone_id
+        ]
+        total_weight = self._total_weight(active_drones)
+
+        if total_weight == 0:
             return {"status": "REJECTED", "reason": "no_active_drones"}
 
-        total_weight = sum(self._get_weight(d) for d in active_drones)
-        weight_for = sum(
-            self._get_weight(drone_id)
+        votes_weight = sum(
+            self._weight(drone_id)
             for drone_id, vote in blacklist_votes
-            if vote and drone_id in active_drones
+            if vote and drone_id not in self.blacklist
         )
-        vote_rate = weight_for / total_weight if total_weight > 0 else 0.0
+        vote_rate = votes_weight / total_weight
 
-        if vote_rate >= self.QUORUM:
+        if vote_rate >= QUORUM:
             if suspect_drone_id not in self.blacklist:
                 self.blacklist.append(suspect_drone_id)
             status = "BLACKLISTED"
         else:
             status = "CLEARED"
 
-        return {
+        result = {
             "suspect": suspect_drone_id,
+            "suspect_tier": self._reputation.get(suspect_drone_id, "ROOKIE"),
             "total_voters": len(active_drones),
-            "total_weight": round(total_weight, 2),
-            "weight_for_blacklist": round(weight_for, 2),
-            "vote_rate": round(vote_rate, 2),
+            "total_weight": total_weight,
+            "votes_weight_for_blacklist": votes_weight,
+            "vote_rate": round(vote_rate, 3),
             "status": status,
             "timestamp": int(time.time())
         }
+        self.votes_log.append(result)
+        return result
 
     def get_swarm_status(self) -> dict:
+        active_drones = [d for d in self.drone_ids if d not in self.blacklist]
+        tier_distribution = {}
+        for drone_id in active_drones:
+            tier = self._reputation.get(drone_id, "ROOKIE")
+            tier_distribution[tier] = tier_distribution.get(tier, 0) + 1
         log_hash = hashlib.sha256(str(self.votes_log).encode()).hexdigest()
         return {
             "total_drones": len(self.drone_ids),
-            "active_drones": len(self.drone_ids) - len(self.blacklist),
+            "active_drones": len(active_drones),
+            "total_voting_weight": self._total_weight(active_drones),
             "blacklisted": self.blacklist,
+            "tier_distribution": tier_distribution,
             "votes_cast": len(self.votes_log),
             "log_hash": log_hash,
             "on_chain_ready": True
+        }
+
+
+class ByzantineDetector:
+    """
+    Detects Byzantine behavior in drone swarm.
+    Flags drones that consistently vote against the majority.
+    Protects against coordinated attacks on consensus.
+    """
+
+    SUSPICION_THRESHOLD = 3   # votes against majority before flagged
+    BYZANTINE_THRESHOLD = 5   # votes against majority before blacklisted
+
+    def __init__(self, consensus: SwarmConsensus):
+        self.consensus = consensus
+        self._against_majority = {}  # drone_id -> count
+
+    def analyze(self, vote_result: dict, votes: list) -> dict:
+        """
+        Analyze voting round for Byzantine behavior.
+        Flags drones that voted against the majority outcome.
+        """
+        majority_approve = vote_result["status"] == "APPROVED"
+        flagged = []
+        blacklisted = []
+
+        for drone_id, vote in votes:
+            if drone_id in self.consensus.blacklist:
+                continue
+            voted_against = (majority_approve and not vote) or \
+                           (not majority_approve and vote)
+            if voted_against:
+                self._against_majority[drone_id] = \
+                    self._against_majority.get(drone_id, 0) + 1
+                count = self._against_majority[drone_id]
+
+                if count >= self.BYZANTINE_THRESHOLD:
+                    if drone_id not in self.consensus.blacklist:
+                        self.consensus.blacklist.append(drone_id)
+                    blacklisted.append(drone_id)
+                elif count >= self.SUSPICION_THRESHOLD:
+                    flagged.append(drone_id)
+
+        return {
+            "byzantine_flagged": flagged,
+            "byzantine_blacklisted": blacklisted,
+            "suspicion_counts": dict(self._against_majority),
+            "swarm_safe": len(blacklisted) == 0
+        }
+
+    def get_status(self) -> dict:
+        import hashlib
+        return {
+            "monitored_drones": len(self._against_majority),
+            "suspicious_drones": [
+                d for d, c in self._against_majority.items()
+                if c >= self.SUSPICION_THRESHOLD
+            ],
+            "blacklisted": self.consensus.blacklist,
+            "status_hash": hashlib.sha256(
+                str(self._against_majority).encode()
+            ).hexdigest()
         }

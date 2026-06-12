@@ -3,6 +3,7 @@ DroneSync - Persistent Storage
 Saves drone state between runs — reputation, memory, mission history.
 Without this, a 24/7 node loses all data on restart.
 """
+import hashlib
 import json
 import os
 import time
@@ -69,3 +70,57 @@ class DroneStorage:
         """Reset drone state — for testing."""
         if os.path.exists(self.path):
             os.remove(self.path)
+
+
+class SecureStorage:
+    """
+    Encrypted storage for sensitive mission data.
+    Uses Fernet symmetric encryption (AES-128-CBC + HMAC).
+    Key derived from drone_id — in production use hardware key.
+    """
+
+    def __init__(self, drone_id: str):
+        import os, base64
+        from cryptography.fernet import Fernet
+        from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
+        from cryptography.hazmat.primitives import hashes
+        salt = hashlib.sha256(drone_id.encode()).digest()[:16]
+        kdf = PBKDF2HMAC(algorithm=hashes.SHA256(), length=32,
+                         salt=salt, iterations=100000)
+        key = base64.urlsafe_b64encode(kdf.derive(drone_id.encode()))
+        self._fernet = Fernet(key)
+        self.drone_id = drone_id
+        self._store = {}
+
+    def save(self, key: str, data: dict) -> str:
+        """Encrypt and store data. Returns storage hash."""
+        import json
+        payload = json.dumps(data, sort_keys=True).encode()
+        encrypted = self._fernet.encrypt(payload)
+        self._store[key] = encrypted
+        return hashlib.sha256(payload).hexdigest()
+
+    def load(self, key: str) -> dict:
+        """Decrypt and return data."""
+        import json
+        if key not in self._store:
+            return {}
+        decrypted = self._fernet.decrypt(self._store[key])
+        return json.loads(decrypted)
+
+    def verify(self, key: str, expected_hash: str) -> bool:
+        """Verify data has not been tampered with."""
+        import json
+        if key not in self._store:
+            return False
+        decrypted = self._fernet.decrypt(self._store[key])
+        actual_hash = hashlib.sha256(decrypted).hexdigest()
+        return actual_hash == expected_hash
+
+    def get_status(self) -> dict:
+        return {
+            "drone_id": self.drone_id,
+            "stored_keys": list(self._store.keys()),
+            "total_records": len(self._store),
+            "encrypted": True
+        }

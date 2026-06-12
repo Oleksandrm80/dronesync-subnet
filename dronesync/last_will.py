@@ -52,6 +52,40 @@ class DroneLastWill:
             "on_chain_ready": True,
             "insurance_claim_ready": True
         }
+    def check_health(self, battery_pct: float, signal_strength: float,
+                     last_position: list, mission_id: str) -> dict:
+        """
+        Autonomous health check — called periodically during flight.
+        Auto-triggers Last Will if critical thresholds exceeded.
+        """
+        status = "OK"
+        triggered = False
+        will = None
+
+        if battery_pct < 5.0:
+            status = "CRITICAL_BATTERY"
+            triggered = True
+            will = self.trigger(last_position, "CRITICAL_BATTERY_FAILURE",
+                                battery_pct, mission_id)
+        elif signal_strength < 0.1:
+            status = "SIGNAL_LOST"
+            triggered = True
+            will = self.trigger(last_position, "SIGNAL_LOST",
+                                battery_pct, mission_id)
+        elif battery_pct < 15.0:
+            status = "LOW_BATTERY"
+        elif signal_strength < 0.3:
+            status = "WEAK_SIGNAL"
+
+        return {
+            "drone_id": self.drone_id,
+            "status": status,
+            "triggered": triggered,
+            "battery_pct": battery_pct,
+            "signal_strength": signal_strength,
+            "last_will": will,
+            "timestamp": int(time.time())
+        }
 
     def simulate_crash(self, trajectory_positions: list,
                        mission_id: str) -> dict:

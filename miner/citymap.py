@@ -10,13 +10,20 @@ import random
 class CityZone:
     """Represents an urban zone with restrictions."""
     def __init__(self, lat: float, lon: float, radius_m: float,
-                 zone_type: str, max_alt: float = 0):
+                 zone_type: str, max_alt: float = 0,
+                 expires_at: int = 0, reason: str = ""):
         self.lat = lat
         self.lon = lon
         self.radius_m = radius_m
-        self.zone_type = zone_type  # "no_fly", "building", "park", "hospital"
+        self.zone_type = zone_type
         self.max_alt = max_alt
+        self.expires_at = expires_at  # 0 = permanent
+        self.reason = reason
 
+    def is_active(self, now: int) -> bool:
+        if self.expires_at == 0:
+            return True
+        return now < self.expires_at
 
 class CityMap:
     """
@@ -68,15 +75,39 @@ class CityMap:
                 max_alt=120 if zone_type == "airport" else 0
             ))
         return zones
+    def add_temporary_zone(self, lat: float, lon: float,
+                            radius_m: float, zone_type: str,
+                            duration_s: int, reason: str = "") -> CityZone:
+        """Add a temporary no-fly zone that expires after duration_s seconds."""
+        import time
+        zone = CityZone(
+            lat=lat, lon=lon, radius_m=radius_m,
+            zone_type=zone_type, max_alt=0,
+            expires_at=int(time.time()) + duration_s,
+            reason=reason
+        )
+        self.zones.append(zone)
+        return zone
+
+    def expire_zones(self) -> int:
+        """Remove expired temporary zones. Returns count removed."""
+        import time
+        now = int(time.time())
+        before = len(self.zones)
+        self.zones = [z for z in self.zones if z.is_active(now)]
+        return before - len(self.zones)
 
     def is_no_fly(self, lat: float, lon: float) -> tuple:
         """Check if position is in no-fly zone. Returns (bool, reason)."""
+        import time
+        now = int(time.time())
         for zone in self.zones:
+            if not zone.is_active(now):
+                continue
             dist = self._haversine(lat, lon, zone.lat, zone.lon)
             if dist < zone.radius_m:
                 return True, zone.zone_type
         return False, None
-
     def safe_altitude(self, lat: float, lon: float,
                        base_alt: float = 50.0) -> float:
         """Calculate minimum safe altitude for position."""

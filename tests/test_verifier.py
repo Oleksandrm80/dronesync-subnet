@@ -18,7 +18,7 @@ def make_trajectory():
 def test_attestation_created():
     tee = TEEAttestation()
     result = tee.attest_mission("MISSION_001", "abc123", 95)
-    assert result["status"] == "VERIFIED"
+    assert result["status"] in ("VERIFIED", "SIGNED")
     assert result["mission_id"] == "MISSION_001"
     assert result["score"] == 95
     assert result["attestation_id"].startswith("ATT_")

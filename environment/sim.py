@@ -31,7 +31,54 @@ class DroneEnvironment:
             timestamp=trajectory.timestamps[-1]
         )
 
+def fuse_sensors(sensor_data: SensorData) -> dict:
+    """
+    Fuse LiDAR, camera and IMU into a single situational picture.
+    Returns unified state: position confidence, obstacles, motion.
+    """
+    # LiDAR — average point cloud to get centroid
+    lidar = sensor_data.lidar_points
+    if lidar:
+        cx = sum(p[0] for p in lidar) / len(lidar)
+        cy = sum(p[1] for p in lidar) / len(lidar)
+        cz = sum(p[2] for p in lidar) / len(lidar)
+        lidar_confidence = min(1.0, len(lidar) / 50.0)
+    else:
+        cx = cy = cz = 0.0
+        lidar_confidence = 0.0
 
+    # Camera — count high-confidence detections
+    detections = sensor_data.camera_detections
+    obstacles = [d for d in detections if d.get("confidence", 0) >= 0.8]
+    drone_detected = any(d.get("object") == "drone" for d in detections)
+
+    # IMU — check stability
+    imu = sensor_data.imu_data
+    acc = imu.get("acceleration", [0, 0, -9.8])
+    gyro = imu.get("gyro", [0, 0, 0])
+    lateral_acc = (acc[0] ** 2 + acc[1] ** 2) ** 0.5
+    rotation_rate = (gyro[0] ** 2 + gyro[1] ** 2 + gyro[2] ** 2) ** 0.5
+    imu_stable = lateral_acc < 1.0 and rotation_rate < 0.1
+
+    # Fused confidence
+    camera_confidence = len(obstacles) / max(len(detections), 1)
+    fused_confidence = round(
+        lidar_confidence * 0.5 + camera_confidence * 0.3 +
+        (0.2 if imu_stable else 0.0), 3
+    )
+
+    return {
+        "position": {"lat": round(cx, 6), "lon": round(cy, 6), "alt": round(cz, 1)},
+        "lidar_confidence": round(lidar_confidence, 3),
+        "camera_confidence": round(camera_confidence, 3),
+        "imu_stable": imu_stable,
+        "fused_confidence": fused_confidence,
+        "obstacles_detected": len(obstacles),
+        "drone_proximity": drone_detected,
+        "lateral_acceleration": round(lateral_acc, 3),
+        "rotation_rate": round(rotation_rate, 4),
+        "sensor_agreement": fused_confidence >= 0.6
+    }
 class SwarmEnvironment:
     """
     Multi-drone swarm simulation with predictive collision avoidance.
@@ -95,8 +142,10 @@ class SwarmEnvironment:
                 padded[i], [padded[j] for j in range(len(drone_ids)) if j != i]
             )
             sensor = self._simulate_sensor(final_pos, conflicts)
+            fused = fuse_sensors(sensor)
             results[drone_id] = {
                 "sensor_data": sensor,
+                "sensor_fusion": fused,
                 "collision_risk": conflicts,
                 "avoidance_maneuvers": avoidance_applied,
                 "status": "WARNING" if conflicts else "CLEAR",
@@ -136,15 +185,17 @@ class SwarmEnvironment:
                     pos[0], pos[1], other_pos[0], other_pos[1]
                 )
                 if dist < self.SAFE_DISTANCE_M:
+                    pos = my_positions[step]
                     alt_separation = abs(pos[2] - other_pos[2])
                     if alt_separation < 10:
+                        new_alt = pos[2] + 10
                         my_positions[step] = [
-                            pos[0], pos[1], pos[2] + 10, pos[3]
+                            pos[0], pos[1], new_alt, pos[3]
                         ]
                         maneuvers.append({
                             "step": step,
                             "action": "altitude_adjusted",
-                            "new_alt": pos[2] + 10
+                            "new_alt": new_alt
                         })
         return maneuvers
 

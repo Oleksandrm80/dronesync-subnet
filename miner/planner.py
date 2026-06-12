@@ -9,13 +9,13 @@ import hashlib
 import random
 
 from dronesync.protocol import (
-    MissionInstruction, 
-    Trajectory, 
-    SensorData, 
+    MissionInstruction,
+    Trajectory,
+    SensorData,
     PoPWArtifact,
     Waypoint
 )
-
+from dronesync.navigation import NavigationEngine
 
 class DronePlanner:
     """Основной класс для планирования траектории дрона"""
@@ -138,8 +138,8 @@ class AIPlanner:
 
     def __init__(self):
         self.mission_history = []
-        self.learned_weights = {
-            "safety": 0.40,
+        self.nav = NavigationEngine()
+        self.learned_weights = {            "safety": 0.40,
             "efficiency": 0.35,
             "energy": 0.25
         }
@@ -194,6 +194,18 @@ class AIPlanner:
                 "steps_hash": steps_hash
             }
         )
+        all_wps = [mission.origin] + mission.waypoints + [mission.destination]
+        sim = self.nav.sim_flight(all_wps)
+        etas = self.nav.calculate_etas(sim.segments)
+        trajectory.metadata["sim_flight"] = sim.summary()
+        trajectory.metadata["nav_alerts"] = [
+            {"level": a.level.value, "code": a.code, "message": a.message}
+            for a in sim.alerts
+        ]
+        trajectory.metadata["etas"] = [
+            {"waypoint": e.waypoint_index, "planned_eta": e.planned_eta}
+            for e in etas
+        ]
 
         self.mission_history.append({
             "mission_type": mission.mission_type.value,

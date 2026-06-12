@@ -146,3 +146,63 @@ class DroneEvaluator(MissionScorer):
                 "recorded_hash": recorded_hash,
                 "recomputed_hash": recomputed_hash
             }
+
+
+class ValidatorIdentity:
+    """
+    Validator signs its score with private key.
+    Anyone can verify the score came from this validator
+    using only the public key.
+    """
+
+    def __init__(self, validator_id: str):
+        self.validator_id = validator_id
+        from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
+        self._private_key = Ed25519PrivateKey.generate()
+        self._public_key = self._private_key.public_key()
+
+    @property
+    def public_key_hex(self) -> str:
+        from cryptography.hazmat.primitives.serialization import Encoding, PublicFormat
+        return self._public_key.public_bytes(Encoding.Raw, PublicFormat.Raw).hex()
+
+    def sign_score(self, mission_id: str, score: int, grade: str) -> dict:
+        """Sign a validator score — returns signed result."""
+        import hashlib, json, base64, time
+        payload = {
+            "validator_id": self.validator_id,
+            "mission_id": mission_id,
+            "score": score,
+            "grade": grade,
+            "timestamp": int(time.time())
+        }
+        payload_bytes = json.dumps(payload, sort_keys=True).encode()
+        sig = self._private_key.sign(hashlib.sha256(payload_bytes).digest())
+        return {
+            **payload,
+            "signature": base64.b64encode(sig).decode(),
+            "public_key": self.public_key_hex
+        }
+
+    @staticmethod
+    def verify_score(signed_score: dict) -> bool:
+        """Verify score signature using only public key."""
+        import hashlib, json, base64
+        from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PublicKey
+        from cryptography.exceptions import InvalidSignature
+        try:
+            payload = {
+                "validator_id": signed_score["validator_id"],
+                "mission_id": signed_score["mission_id"],
+                "score": signed_score["score"],
+                "grade": signed_score["grade"],
+                "timestamp": signed_score["timestamp"]
+            }
+            payload_bytes = json.dumps(payload, sort_keys=True).encode()
+            pub_bytes = bytes.fromhex(signed_score["public_key"])
+            vk = Ed25519PublicKey.from_public_bytes(pub_bytes)
+            sig = base64.b64decode(signed_score["signature"])
+            vk.verify(sig, hashlib.sha256(payload_bytes).digest())
+            return True
+        except (InvalidSignature, Exception):
+            return False
