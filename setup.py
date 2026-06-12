@@ -7,6 +7,7 @@ setup(
     author="Oleksandr Malchev",
     author_email="malchevoleksandr@gmail.com",
     url="https://github.com/Oleksandrm80/dronesync-subnet",
+    license="Apache-2.0",
     packages=find_packages(),
     python_requires=">=3.10",
     install_requires=[
@@ -20,7 +21,7 @@ setup(
     ],
     classifiers=[
         "Development Status :: 3 - Alpha",
-        "License :: OSI Approved :: MIT License",
+        "License :: OSI Approved :: Apache Software License",
         "Programming Language :: Python :: 3.10",
     ],
 )
