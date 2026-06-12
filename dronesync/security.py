@@ -39,7 +39,7 @@ class Ed25519Signer:
     def sign(self, data: bytes) -> str:
         """Sign bytes, return hex signature."""
         if self._backend == "cryptography":
-            sig = self._private_key.sign(data)
+            sig = self._private_key.sign(hashlib.sha256(data).digest())
             return sig.hex()
         else:
             return hmac.new(self._secret, data, hashlib.sha256).hexdigest()
@@ -57,7 +57,7 @@ class Ed25519Signer:
                 else:
                     pub_bytes = bytes.fromhex(public_key_hex)
                     pub_key = Ed25519PublicKey.from_public_bytes(pub_bytes)
-                pub_key.verify(bytes.fromhex(signature_hex), data)
+                pub_key.verify(bytes.fromhex(signature_hex), hashlib.sha256(data).digest())
                 return True
             except Exception:
                 return False
@@ -153,8 +153,9 @@ class CommandSigner:
     Every mission command is signed with HMAC-SHA256.
     """
 
-    def __init__(self, secret_key: str = "dronesync_secret_v1"):
-        self.secret = secret_key.encode()
+    def __init__(self, secret_key: str = None):
+        import os
+        self.secret = (secret_key or os.urandom(32).hex()).encode()
         self.nonce_cache = set()
 
     def sign_command(self, command: dict) -> dict:

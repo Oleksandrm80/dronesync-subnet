@@ -316,9 +316,9 @@ def run_reputation():
         rep.record_mission(mission_id, score, safe, battery)
     status = rep.get_status()
     print("drone_id: " + status["drone_id"])
-    print("reputation_score: " + str(status["reputation_score"]))
+    print("reputation_score: " + str(status["score"]))
     print("tier: " + status["tier"])
-    print("total_missions: " + str(status["total_missions"]))
+    print("total_missions: " + str(status["missions_count"]))
     print("on_chain_ready: " + str(status["on_chain_ready"]))
     print()
 

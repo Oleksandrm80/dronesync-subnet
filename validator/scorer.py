@@ -97,7 +97,13 @@ class MissionScorer:
         return max(0.0, 1.0 - min(1.0, (avg_gps - 5) * 0.05))
 class DroneEvaluator(MissionScorer):
     def score(self, trajectory, sensor_data):
-        readings = sensor_data if isinstance(sensor_data, list) else []
+        if isinstance(sensor_data, list):
+            readings = sensor_data
+        elif hasattr(sensor_data, 'lidar_points'):
+            readings = [{"battery_pct": 95, "signal_strength": 0.9,
+                         "lidar_points": len(sensor_data.lidar_points)}]
+        else:
+            readings = []
         safety = self._score_safety(trajectory.positions, readings)
         sensor_quality = self._score_sensor_quality(readings)
         total = safety * 0.80 + sensor_quality * 0.20

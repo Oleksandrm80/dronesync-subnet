@@ -27,16 +27,22 @@ class DroneStorage:
     def save(self, data: dict):
         """Save drone state to disk."""
         data = {**data, "drone_id": self.drone_id, "last_saved": int(time.time())}
+        payload = json.dumps(data, sort_keys=True, indent=2)
+        data["_integrity"] = hashlib.sha256(payload.encode()).hexdigest()
         with open(self.path, "w", encoding="utf-8") as f:
             json.dump(data, f, indent=2)
-
     def load(self) -> dict:
         """Load drone state from disk. Returns empty dict if no data yet."""
         if not os.path.exists(self.path):
             return {}
         with open(self.path, "r", encoding="utf-8") as f:
-            return json.load(f)
-
+            data = json.load(f)
+        stored_hash = data.pop("_integrity", None)
+        if stored_hash:
+            check = json.dumps(data, sort_keys=True, indent=2)
+            if hashlib.sha256(check.encode()).hexdigest() != stored_hash:
+                return {"_tampered": True}
+        return data
     def exists(self) -> bool:
         return os.path.exists(self.path)
 
@@ -84,22 +90,35 @@ class SecureStorage:
         from cryptography.fernet import Fernet
         from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
         from cryptography.hazmat.primitives import hashes
-        salt = hashlib.sha256(drone_id.encode()).digest()[:16]
-        kdf = PBKDF2HMAC(algorithm=hashes.SHA256(), length=32,
-                         salt=salt, iterations=100000)
-        key = base64.urlsafe_b64encode(kdf.derive(drone_id.encode()))
+        import os
+        _key_path = os.path.join(STORAGE_DIR, drone_id + "_fernet.key")
+        os.makedirs(STORAGE_DIR, exist_ok=True)
+        if os.path.exists(_key_path):
+            with open(_key_path, "rb") as _kf:
+                key = _kf.read()
+        else:
+            key = base64.urlsafe_b64encode(os.urandom(32))
+            with open(_key_path, "wb") as _kf:
+                _kf.write(key)
         self._fernet = Fernet(key)
         self.drone_id = drone_id
         self._store = {}
-
+        self._persist_path = os.path.join(STORAGE_DIR, drone_id + "_secure.bin")
+        os.makedirs(STORAGE_DIR, exist_ok=True)
+        if os.path.exists(self._persist_path):
+            import pickle
+            with open(self._persist_path, "rb") as f:
+                self._store = pickle.load(f)
     def save(self, key: str, data: dict) -> str:
         """Encrypt and store data. Returns storage hash."""
         import json
         payload = json.dumps(data, sort_keys=True).encode()
         encrypted = self._fernet.encrypt(payload)
         self._store[key] = encrypted
+        import pickle
+        with open(self._persist_path, "wb") as f:
+            pickle.dump(self._store, f)
         return hashlib.sha256(payload).hexdigest()
-
     def load(self, key: str) -> dict:
         """Decrypt and return data."""
         import json

@@ -16,9 +16,15 @@ class ReplayGuard:
 
     MAX_AGE_SECONDS = 3600  # mission older than 1 hour is rejected
 
-    def __init__(self):
-        self._seen = {}  # mission_id -> timestamp
-
+    def __init__(self, persist_path: str = ".dronesync_data/replay_guard.json"):
+        import os, json
+        self._persist_path = persist_path
+        os.makedirs(os.path.dirname(persist_path), exist_ok=True)
+        if os.path.exists(persist_path):
+            with open(persist_path) as f:
+                self._seen = json.load(f)
+        else:
+            self._seen = {}
     def check(self, mission_id: str, created_at: float) -> dict:
         """
         Check if mission is safe to process.
@@ -57,8 +63,10 @@ class ReplayGuard:
 
     def register(self, mission_id: str):
         """Manually register a mission_id as seen."""
+        import json
         self._seen[mission_id] = time.time()
-
+        with open(self._persist_path, "w") as f:
+            json.dump(self._seen, f)
     def is_seen(self, mission_id: str) -> bool:
         return mission_id in self._seen
 

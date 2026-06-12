@@ -34,28 +34,31 @@ class MissionAdapter:
     def from_synapse_task(self, task: Dict) -> object:
         origin_raw = task.get("origin", {})
         dest_raw = task.get("destination", {})
+        def _clamp_lat(v): return max(-90.0, min(90.0, float(v)))
+        def _clamp_lon(v): return max(-180.0, min(180.0, float(v)))
+        def _clamp_alt(v): return max(0.0, min(500.0, float(v)))
 
         origin = type("Waypoint", (), {
-            "lat": float(origin_raw.get("lat", 47.3769)),
-            "lon": float(origin_raw.get("lon", 8.5417)),
-            "alt": float(origin_raw.get("alt", 50)),
-            "speed": float(origin_raw.get("speed", 5)),
+            "lat": _clamp_lat(origin_raw.get("lat", 47.3769)),
+            "lon": _clamp_lon(origin_raw.get("lon", 8.5417)),
+            "alt": _clamp_alt(origin_raw.get("alt", 50)),
+            "speed": _clamp_alt(origin_raw.get("speed", 5)),
         })
 
         destination = type("Waypoint", (), {
-            "lat": float(dest_raw.get("lat", 47.3800)),
-            "lon": float(dest_raw.get("lon", 8.5450)),
-            "alt": float(dest_raw.get("alt", 50)),
-            "speed": float(dest_raw.get("speed", 5)),
+            "lat": _clamp_lat(dest_raw.get("lat", 47.3800)),
+            "lon": _clamp_lon(dest_raw.get("lon", 8.5450)),
+            "alt": _clamp_alt(dest_raw.get("alt", 50)),
+            "speed": _clamp_alt(dest_raw.get("speed", 5)),
         })
 
         waypoints = []
         for wp in task.get("waypoints", []):
             waypoints.append(type("Waypoint", (), {
-                "lat": float(wp.get("lat", 47.3780)),
-                "lon": float(wp.get("lon", 8.5430)),
-                "alt": float(wp.get("alt", 50)),
-                "speed": float(wp.get("speed", 5)),
+                "lat": _clamp_lat(wp.get("lat", 47.3780)),
+                "lon": _clamp_lon(wp.get("lon", 8.5430)),
+                "alt": _clamp_alt(wp.get("alt", 50)),
+                "speed": _clamp_alt(wp.get("speed", 5)),
             }))
 
         mission = type("Mission", (), {
@@ -93,6 +96,8 @@ class DroneNavSynapseHandler:
         self.firewall = DroneFirewall(drone_id=drone_id)
         self.memory = DroneMemory(drone_id=drone_id)
         self.storage = DroneStorage(drone_id=drone_id)
+        from dronesync.replay_guard import ReplayGuard
+        self.replay_guard = ReplayGuard()
         self.reputation = DroneReputation(drone_id=drone_id)
         self.weather = WeatherService()
 
@@ -111,12 +116,17 @@ class DroneNavSynapseHandler:
         t_start = time.time()
 
         # 1. Firewall check — проверяем что команда легитимна
+        import json, hmac as _hmac, hashlib as _hl
         cmd = {
             "action": "execute_task",
             "source": "konnex_validator",
             "timestamp": int(time.time()),
-            "signature": synapse_task.get("validator_signature", "konnex_v1"),
         }
+        cmd["signature"] = _hmac.new(
+            self.firewall._secret,
+            json.dumps(cmd, sort_keys=True).encode(),
+            _hl.sha256
+        ).hexdigest()
         fw_result = self.firewall.filter(cmd)
         if fw_result["status"] == "BLOCKED":
             return {
@@ -128,6 +138,12 @@ class DroneNavSynapseHandler:
 
         # 2. Конвертируем задание
         mission = self.adapter.from_synapse_task(synapse_task)
+        rg_check = self.replay_guard.check(
+            mission.mission_id, float(synapse_task.get("created_at", time.time()))
+        )
+        if not rg_check["allowed"]:
+            return {"status": "REJECTED", "reason": rg_check["reason"],
+                    "mission_id": mission.mission_id}
 
         # 3. Планируем траекторию
         trajectory = self.planner.plan_trajectory(mission)
@@ -247,6 +263,9 @@ class SwarmSynapseHandler:
         ]
         mission_id = synapse_task.get("task_id", "DSYNC_swarm")
         consensus_result = self.consensus.vote_on_route(mission_id, votes)
+        from dronesync.swarm_consensus import ByzantineDetector
+        _bd = ByzantineDetector(self.consensus)
+        _bd.analyze(consensus_result, votes)
 
         avg_score = round(
             sum(r["score"] for r in results.values() if r.get("status") == "OK")

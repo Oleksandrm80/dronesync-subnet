@@ -4,7 +4,8 @@ Filters all incoming commands. Blocks anomalies and logs attempts in PoPW.
 """
 import time
 import hashlib
-
+import hmac
+import json
 
 class DroneFirewall:
     """
@@ -16,15 +17,20 @@ class DroneFirewall:
     MAX_COMMANDS_PER_MINUTE = 20
     ALLOWED_ACTIONS = {"fly", "hover", "land", "return_home", "scan", "deliver", "execute_task"}
 
-    def __init__(self, drone_id: str):
+    def __init__(self, drone_id: str, secret_key: str = None):
         self.drone_id = drone_id
         self.blocked_log = []
         self.allowed_log = []
         self._command_times = []
         self.trusted_sources = set()
+        import os
+        self._secret = (secret_key or os.urandom(32).hex()).encode()
+        self._admin_token = os.urandom(16).hex()
 
-    def add_trusted_source(self, source_id: str) -> dict:
-        """Add a trusted source that bypasses rate limiting and signature checks."""
+    def add_trusted_source(self, source_id: str, admin_token: str = None) -> dict:
+        """Add a trusted source. Requires admin_token to prevent unauthorized bypass."""
+        if not admin_token or admin_token != self._admin_token:
+            return {"status": "DENIED", "reason": "invalid_admin_token"}
         self.trusted_sources.add(source_id)
         return {"status": "ADDED", "source_id": source_id}
 
@@ -48,9 +54,17 @@ class DroneFirewall:
             return self._block(command, "unknown_action")
 
         # Check 2: missing signature
+        # Check 2: signature must exist and be cryptographically valid
         if "signature" not in command:
             return self._block(command, "missing_signature")
-
+        cmd_copy = {k: v for k, v in command.items() if k != "signature"}
+        expected_sig = hmac.new(
+            self._secret,
+            json.dumps(cmd_copy, sort_keys=True).encode(),
+            hashlib.sha256
+        ).hexdigest()
+        if not hmac.compare_digest(command["signature"], expected_sig):
+            return self._block(command, "invalid_signature")
         # Check 3: stale command (older than 30 seconds)
         now = int(time.time())
         if timestamp and (now - timestamp) > 30:

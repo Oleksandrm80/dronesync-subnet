@@ -16,6 +16,7 @@ setup(
         "requests>=2.31.0",
         "websockets>=11.0",
         "python-dotenv>=1.0.0",
+        "cryptography>=38.0.0",
     ],
     classifiers=[
         "Development Status :: 3 - Alpha",

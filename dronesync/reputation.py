@@ -63,15 +63,18 @@ class DroneReputation:
             return "ROOKIE"
 
     def get_status(self) -> dict:
-        """Return current reputation status."""
-        reputation_hash = hashlib.sha256(
-            str(self.missions).encode()
+        import hashlib, json
+        reputation_data = {
+            "drone_id": self.drone_id,
+            "score": self.score,
+            "tier": self.tier,
+            "missions_count": len(self.missions),
+        }
+        commitment = hashlib.sha256(
+            json.dumps(reputation_data, sort_keys=True).encode()
         ).hexdigest()
         return {
-            "drone_id": self.drone_id,
-            "reputation_score": self.score,
-            "tier": self.tier,
-            "total_missions": len(self.missions),
-            "reputation_hash": reputation_hash,
+            **reputation_data,
+            "reputation_hash": commitment,
             "on_chain_ready": True
         }

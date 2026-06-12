@@ -122,9 +122,9 @@ class ThreatDefense:
         Prevents MIT 2024 swarm hijacking attack.
         """
         expected = hashlib.sha256(
-            f"{drone_id}{mission_id}dronesync".encode()
-        ).hexdigest()[:16]
-        valid = peer_signature[:16] == expected
+            f"{drone_id}{mission_id}".encode()
+        ).hexdigest()
+        valid = peer_signature == expected
         return {
             "peer_verified": valid,
             "drone_id": drone_id,
@@ -185,6 +185,37 @@ class ThreatDefense:
             "total_threats": gps_result["gps_threats"]
         }
 
+    def cross_validate_sensors(self, gps_positions: list,
+                                imu_data: dict = None,
+                                peer_positions: list = None) -> dict:
+        warnings = []
+        if imu_data and gps_positions:
+            imu_speed = imu_data.get("speed_ms", 0)
+            if len(gps_positions) >= 2:
+                p1, p2 = gps_positions[-2], gps_positions[-1]
+                gps_dist = self._haversine(p1[0], p1[1], p2[0], p2[1])
+                time_delta = max(abs(p2[3] - p1[3]) if len(p2) > 3 else 1.0, 0.1)
+                gps_speed = gps_dist / time_delta
+                if abs(gps_speed - imu_speed) > 50:
+                    warnings.append({"type": "GPS_IMU_MISMATCH",
+                                     "gps_speed": round(gps_speed, 2),
+                                     "imu_speed": round(imu_speed, 2),
+                                     "severity": "HIGH"})
+        if peer_positions and gps_positions:
+            last_gps = gps_positions[-1]
+            for peer in peer_positions:
+                dist = self._haversine(last_gps[0], last_gps[1], peer[0], peer[1])
+                if dist > 500:
+                    warnings.append({"type": "PEER_POSITION_MISMATCH",
+                                     "distance_m": round(dist, 1),
+                                     "severity": "MEDIUM"})
+        return {
+            "cross_validated": len(warnings) == 0,
+            "warnings": warnings,
+            "status": "COMPROMISED" if any(
+                w["severity"] == "HIGH" for w in warnings
+            ) else "CLEAN"
+        }
     def _calculate_drift(self, positions: list) -> float:
         if len(positions) < 2:
             return 0.0

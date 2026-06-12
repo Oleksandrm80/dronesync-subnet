@@ -37,11 +37,14 @@ def test_reputation_on_chain_ready():
 # --- Firewall ---
 
 def test_firewall_allows_valid_command():
+    import json, hmac, hashlib
     fw = DroneFirewall("DRONE_001")
-    cmd = {"action": "fly", "source": "op", "timestamp": int(time.time()), "signature": "abc"}
+    cmd = {"action": "fly", "source": "op", "timestamp": int(time.time())}
+    cmd_copy = {k: v for k, v in cmd.items() if k != "signature"}
+    sig = hmac.new(fw._secret, json.dumps(cmd_copy, sort_keys=True).encode(), hashlib.sha256).hexdigest()
+    cmd["signature"] = sig
     result = fw.filter(cmd)
     assert result["status"] == "ALLOWED"
-
 def test_firewall_blocks_missing_signature():
     fw = DroneFirewall("DRONE_001")
     cmd = {"action": "fly", "source": "op", "timestamp": int(time.time())}
@@ -57,12 +60,15 @@ def test_firewall_blocks_unknown_action():
     assert result["reason"] == "unknown_action"
 
 def test_firewall_blocks_stale_command():
+    import json, hmac, hashlib
     fw = DroneFirewall("DRONE_001")
-    cmd = {"action": "fly", "source": "op", "timestamp": int(time.time()) - 60, "signature": "abc"}
+    cmd = {"action": "fly", "source": "op", "timestamp": int(time.time()) - 60}
+    cmd_copy = {k: v for k, v in cmd.items() if k != "signature"}
+    sig = hmac.new(fw._secret, json.dumps(cmd_copy, sort_keys=True).encode(), hashlib.sha256).hexdigest()
+    cmd["signature"] = sig
     result = fw.filter(cmd)
     assert result["status"] == "BLOCKED"
     assert result["reason"] == "stale_command"
-
 def test_firewall_report_on_chain_ready():
     fw = DroneFirewall("DRONE_001")
     report = fw.get_report()

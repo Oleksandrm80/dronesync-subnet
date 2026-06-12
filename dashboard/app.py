@@ -131,7 +131,7 @@ def refresh_state():
             "security_status": result["security"]["overall_status"],
             "threat_level": result["security"]["threat_level"],
             "reputation_tier": rep["tier"],
-            "reputation_score": rep["reputation_score"],
+            "reputation_score": rep["score"],
             "on_chain_ready": result["on_chain_ready"],
             "bundle_hash": result["bundle_hash"][:16] + "...",
             "duration_s": result["duration_s"],
@@ -1406,7 +1406,7 @@ def render_dashboard() -> str:
         chain_val = "READY" if d.get("on_chain_ready") else "PENDING"
         tee = d.get("tee_status", "?")
         sec = d.get("security_status", "?")
-        rep_score = d.get("reputation_score", "?")
+        rep_score = d.get("score", "?")
         bh = d.get("bundle_hash", "?")
         drone_cards += f"""<div class="drone-card">
           <div class="drone-card-header">
@@ -1710,7 +1710,7 @@ def render_dashboard() -> str:
     try:
         _st = s.get("storage", {})
         _st_missions = _st.get("missions_saved", len(s.get("missions", [])))
-        _st_rep = _st.get("reputation_score", 50)
+        _st_rep = _st.get("score", 50)
         _st_tier = _st.get("tier", "ACTIVE")
         _st_disk = "✓ YES" if _st.get("persisted_to_disk", True) else "—"
         _st_restart = "✓ YES" if _st.get("survives_restart", True) else "—"
@@ -1947,7 +1947,7 @@ class DashboardHandler(BaseHTTPRequestHandler):
             body = json.dumps(state, default=str).encode()
             self.send_response(200)
             self.send_header("Content-Type", "application/json")
-            self.send_header("Access-Control-Allow-Origin", "*")
+            self.send_header("Access-Control-Allow-Origin", "http://127.0.0.1:8080")
             self.end_headers()
             self.wfile.write(body)
         elif parsed.path == "/api/refresh":

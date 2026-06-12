@@ -141,10 +141,19 @@ class PoPWRecord:
         }
 
     def format_for_chain(self, record: dict) -> str:
+        import json
+        canonical = json.dumps({
+            "mission_id": record["mission_id"],
+            "trajectory_hash": record["trajectory_hash"],
+            "score": record["score"],
+            "attestation_id": record["attestation"]["attestation_id"],
+            "popw_version": record["popw_version"],
+        }, sort_keys=True)
+        reproducible_hash = hashlib.sha256(canonical.encode()).hexdigest()
         return (
             "POPW|" +
             record["mission_id"] + "|" +
             record["trajectory_hash"][:16] + "|" +
             str(record["score"]) + "|" +
-            record["attestation"]["signature"][:16]
+            reproducible_hash[:16]
         )

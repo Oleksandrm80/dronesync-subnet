@@ -139,7 +139,7 @@ class ByzantineDetector:
     SUSPICION_THRESHOLD = 3   # votes against majority before flagged
     BYZANTINE_THRESHOLD = 5   # votes against majority before blacklisted
 
-    def __init__(self, consensus: SwarmConsensus):
+    def __init__(self, consensus: SwarmConsensus = None):
         self.consensus = consensus
         self._against_majority = {}  # drone_id -> count
 
