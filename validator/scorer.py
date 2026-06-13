@@ -174,7 +174,10 @@ class ValidatorIdentity:
 
     def sign_score(self, mission_id: str, score: int, grade: str) -> dict:
         """Sign a validator score — returns signed result."""
-        import hashlib, json, base64, time
+        import hashlib
+        import json
+        import base64
+        import time
         payload = {
             "validator_id": self.validator_id,
             "mission_id": mission_id,
@@ -193,7 +196,9 @@ class ValidatorIdentity:
     @staticmethod
     def verify_score(signed_score: dict) -> bool:
         """Verify score signature using only public key."""
-        import hashlib, json, base64
+        import hashlib
+        import json
+        import base64
         from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PublicKey
         from cryptography.exceptions import InvalidSignature
         try:

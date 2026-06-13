@@ -1,7 +1,7 @@
 """Tests for DroneSync Economic Reward Model."""
 
 import pytest
-from dronesync.economics import RewardCalculator, EconomicSimulator, TIER_MULTIPLIERS
+from dronesync.economics import RewardCalculator, EconomicSimulator
 
 
 class TestRewardCalculator:

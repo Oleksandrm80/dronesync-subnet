@@ -3,6 +3,7 @@ DroneSync - Security Module
 Protection against GPS spoofing, signal hijacking, and command injection
 Critical for PoPW integrity on Konnex network
 """
+from typing import Optional
 import hashlib
 import hmac
 import time
@@ -23,7 +24,7 @@ class Ed25519Signer:
         try:
             from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
             from cryptography.hazmat.primitives.serialization import (
-                Encoding, PublicFormat, PrivateFormat, NoEncryption
+                Encoding, PublicFormat
             )
             self._private_key = Ed25519PrivateKey.generate()
             self._public_key = self._private_key.public_key()
@@ -45,13 +46,11 @@ class Ed25519Signer:
             return hmac.new(self._secret, data, hashlib.sha256).hexdigest()
 
     def verify(self, data: bytes, signature_hex: str,
-               public_key_hex: str = None) -> bool:
+               public_key_hex: Optional[str] = None) -> bool:
         """Verify signature. Uses own public key if none provided."""
         if self._backend == "cryptography":
             try:
                 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PublicKey
-                from cryptography.hazmat.primitives.serialization import Encoding, PublicFormat
-                from cryptography.exceptions import InvalidSignature
                 if public_key_hex is None:
                     pub_key = self._public_key
                 else:
@@ -153,10 +152,10 @@ class CommandSigner:
     Every mission command is signed with HMAC-SHA256.
     """
 
-    def __init__(self, secret_key: str = None):
+    def __init__(self, secret_key: Optional[str] = None):
         import os
         self.secret = (secret_key or os.urandom(32).hex()).encode()
-        self.nonce_cache = set()
+        self.nonce_cache: set = set()
 
     def sign_command(self, command: dict) -> dict:
         """Sign a mission command with HMAC."""

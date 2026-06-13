@@ -1,8 +1,6 @@
 """Tests for validator scoring engine."""
-import time
-import pytest
-from dronesync.protocol import Trajectory, MissionInstruction, MissionType, Waypoint
-from validator.scorer import DroneEvaluator, MissionScorer
+from dronesync.protocol import MissionInstruction, MissionType, Waypoint
+from validator.scorer import DroneEvaluator
 from environment.sim import DroneEnvironment
 from miner.planner import DronePlanner
 

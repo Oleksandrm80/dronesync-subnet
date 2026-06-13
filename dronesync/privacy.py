@@ -4,6 +4,7 @@ Encrypts flight data before on-chain submission.
 Provides HMAC integrity verification and selective field redaction.
 """
 
+from typing import Optional
 import hashlib
 import hmac
 import json
@@ -49,7 +50,7 @@ class FlightDataEncryptor:
     KEY_SIZE = 32
     NONCE_SIZE = 12
 
-    def __init__(self, key: bytes = None, key_id: str = "default"):
+    def __init__(self, key: Optional[bytes] = None, key_id: str = "default"):
         if key is not None and len(key) != self.KEY_SIZE:
             raise ValueError(f"Key must be {self.KEY_SIZE} bytes")
         self._key = key or os.urandom(self.KEY_SIZE)
@@ -123,7 +124,7 @@ class FlightDataRedactor:
 
     SENSITIVE_FIELDS = {"pilot_id", "operator_key", "wallet", "private_key"}
 
-    def redact(self, data: dict, extra_fields: set = None) -> dict:
+    def redact(self, data: dict, extra_fields: Optional[set] = None) -> dict:
         fields = self.SENSITIVE_FIELDS | (extra_fields or set())
         return self._redact_recursive(data, fields)
 

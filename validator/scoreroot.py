@@ -17,8 +17,8 @@ class ScoreRoot:
 
     def __init__(self, validator_id: str):
         self.validator_id = validator_id
-        self.scores = []
-        self.commitments = []
+        self.scores: list = []
+        self.commitments: list = []
 
     def add_score(self, mission_id: str, score: int,
                   trajectory_hash: str, sensor_hash: str):

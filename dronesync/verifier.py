@@ -6,6 +6,7 @@ In production: integrates with Intel SGX / ARM TrustZone.
 Signing: Ed25519 (asymmetric) — private key signs, public key verifies.
 Anyone can verify a PoPW artifact using only the public key.
 """
+from typing import Any
 import hashlib
 import time
 import json
@@ -31,12 +32,10 @@ class DroneKeyPair:
     def verify(data: bytes, signature_b64: str, public_key_hex: str) -> bool:
         import base64
         from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PublicKey
-        from cryptography.hazmat.primitives.serialization import Encoding, PublicFormat
         from cryptography.exceptions import InvalidSignature
         try:
             pub_bytes = bytes.fromhex(public_key_hex)
             from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PublicKey
-            from cryptography.hazmat.primitives.serialization import load_der_public_key
             vk = Ed25519PublicKey.from_public_bytes(pub_bytes)
             sig = base64.b64decode(signature_b64)
             vk.verify(sig, hashlib.sha256(data).digest())
@@ -101,7 +100,7 @@ class PoPWRecord:
         self._keypair = DroneKeyPair()
         self.public_key = self._keypair.public_key_hex
 
-    def create_record(self, mission_id: str, trajectory: object, score: int) -> dict:
+    def create_record(self, mission_id: str, trajectory: Any, score: int) -> dict:
         traj_data = str(trajectory.positions).encode()
         trajectory_hash = hashlib.sha256(traj_data).hexdigest()
         attestation = self.tee.attest_mission(mission_id=mission_id, trajectory_hash=trajectory_hash, score=score)

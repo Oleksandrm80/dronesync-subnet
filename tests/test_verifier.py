@@ -1,5 +1,4 @@
 """Tests for TEE attestation and PoPW records."""
-import pytest
 from dronesync.verifier import TEEAttestation, PoPWRecord
 from dronesync.protocol import Trajectory
 import time

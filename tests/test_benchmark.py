@@ -65,7 +65,7 @@ class TestPlannerSpeed:
         planner = DronePlanner()
         mission = make_mission(20)
         t0 = time.time()
-        traj = planner.plan_trajectory(mission)
+        _ = planner.plan_trajectory(mission)
         elapsed = time.time() - t0
         assert elapsed < 0.5, f"DronePlanner too slow on 20wp: {elapsed:.3f}s"
 
@@ -73,7 +73,7 @@ class TestPlannerSpeed:
         planner = AIPlanner()
         mission = make_mission(20)
         t0 = time.time()
-        traj = planner.plan_trajectory(mission)
+        _ = planner.plan_trajectory(mission)
         elapsed = time.time() - t0
         assert elapsed < 0.5, f"AIPlanner too slow on 20wp: {elapsed:.3f}s"
 

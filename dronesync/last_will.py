@@ -3,6 +3,7 @@ DroneSync - Drone Last Will
 On critical failure, drone sends final PoPW with coordinates and diagnostics.
 Automatic — no human required.
 """
+from typing import Optional
 import hashlib
 import time
 
@@ -122,7 +123,7 @@ class DroneLastWill:
 
     def full_diagnostics(self, last_position: list, failure_cause: str,
                           battery_pct: float, mission_id: str,
-                          sensor_data: dict = None) -> dict:
+                          sensor_data: Optional[dict] = None) -> dict:
         """Full diagnostics report combining last will and recovery plan."""
         will = self.trigger(last_position, failure_cause, 
                            battery_pct, mission_id)

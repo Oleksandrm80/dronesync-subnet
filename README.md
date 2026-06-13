@@ -139,3 +139,39 @@ DroneSync implements multi-layer security:
 - Konnex Testnet: https://subnets.testnet.konnex.world
 - Twitter: @OleksandrM80
 - Repository: https://github.com/Oleksandrm80/dronesync-subnet
+## API Documentation
+
+Full API reference: [docs/API.md](docs/API.md)
+
+## Testing
+
+Run all tests:
+    python3 -m pytest tests/ -v
+
+Run boundary tests:
+    python3 -m pytest tests/test_boundary.py -v
+
+Run integration tests:
+    python3 -m pytest tests/test_integration.py -v
+
+## Docker
+
+Build and run:
+    docker build -t dronesync .
+    docker run dronesync
+
+Or with docker-compose:
+    docker-compose up
+
+## CI/CD
+
+Automated tests run on every push via GitHub Actions.
+See .github/workflows/ci.yml
+
+## Security
+
+- HMAC-SHA256 command signing (DroneFirewall)
+- Replay attack prevention (ReplayGuard)
+- GPS spoofing detection (DroneSecuritySuite)
+- TEE attestation (PoPWRecord)
+- Immutable mission history (MissionHistory)

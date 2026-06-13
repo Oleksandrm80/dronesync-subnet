@@ -86,11 +86,9 @@ class SecureStorage:
     """
 
     def __init__(self, drone_id: str):
-        import os, base64
-        from cryptography.fernet import Fernet
-        from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
-        from cryptography.hazmat.primitives import hashes
         import os
+        import base64
+        from cryptography.fernet import Fernet
         _key_path = os.path.join(STORAGE_DIR, drone_id + "_fernet.key")
         os.makedirs(STORAGE_DIR, exist_ok=True)
         if os.path.exists(_key_path):
@@ -106,18 +104,18 @@ class SecureStorage:
         self._persist_path = os.path.join(STORAGE_DIR, drone_id + "_secure.bin")
         os.makedirs(STORAGE_DIR, exist_ok=True)
         if os.path.exists(self._persist_path):
-            import pickle
-            with open(self._persist_path, "rb") as f:
-                self._store = pickle.load(f)
+            import json as _json
+            with open(self._persist_path, "r") as f:
+                self._store = _json.load(f)
     def save(self, key: str, data: dict) -> str:
         """Encrypt and store data. Returns storage hash."""
         import json
         payload = json.dumps(data, sort_keys=True).encode()
         encrypted = self._fernet.encrypt(payload)
         self._store[key] = encrypted
-        import pickle
-        with open(self._persist_path, "wb") as f:
-            pickle.dump(self._store, f)
+        import json as _json
+        with open(self._persist_path, "w") as f:
+            _json.dump(self._store, f)
         return hashlib.sha256(payload).hexdigest()
     def load(self, key: str) -> dict:
         """Decrypt and return data."""
@@ -129,7 +127,6 @@ class SecureStorage:
 
     def verify(self, key: str, expected_hash: str) -> bool:
         """Verify data has not been tampered with."""
-        import json
         if key not in self._store:
             return False
         decrypted = self._fernet.decrypt(self._store[key])

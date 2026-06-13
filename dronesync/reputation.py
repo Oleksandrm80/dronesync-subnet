@@ -19,7 +19,7 @@ class DroneReputation:
 
     def __init__(self, drone_id: str):
         self.drone_id = drone_id
-        self.missions = []
+        self.missions: list = []
         self.score = self.BASE_SCORE
         self.tier = "ROOKIE"
 
@@ -63,7 +63,7 @@ class DroneReputation:
             return "ROOKIE"
 
     def get_status(self) -> dict:
-        import hashlib, json
+        import json
         reputation_data = {
             "drone_id": self.drone_id,
             "score": self.score,

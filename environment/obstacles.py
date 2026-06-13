@@ -39,7 +39,7 @@ class DynamicObstacleManager:
     PREDICTION_TIME_S = 10.0
 
     def __init__(self, seed: int = 42):
-        self.obstacles = []
+        self.obstacles: list = []
         self._rng = random.Random(seed)
         self._generate_urban_obstacles()
 

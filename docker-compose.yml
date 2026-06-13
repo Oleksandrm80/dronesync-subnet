@@ -1,0 +1,24 @@
+version: "3.9"
+
+services:
+  dronesync:
+    build: .
+    container_name: dronesync-miner
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./data:/app/.dronesync_data
+    environment:
+      - DRONE_ID=DRONE_001
+      - NETWORK=testnet
+    restart: unless-stopped
+
+  dashboard:
+    build: .
+    container_name: dronesync-dashboard
+    command: python dashboard/app.py
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./data:/app/.dronesync_data
+    restart: unless-stopped

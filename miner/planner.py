@@ -3,7 +3,6 @@
 DroneSync Miner - Trajectory Planner
 """
 
-from typing import List, Dict
 import time
 import hashlib
 import random
@@ -12,8 +11,7 @@ from dronesync.protocol import (
     MissionInstruction,
     Trajectory,
     SensorData,
-    PoPWArtifact,
-    Waypoint
+    PoPWArtifact
 )
 from dronesync.navigation import NavigationEngine
 
@@ -35,10 +33,10 @@ class DronePlanner:
         timestamps = []
 
         # Начальная точка
-        current_time = int(time.time())
+        current_time: float = float(time.time())
         positions.append([mission.origin.lat, mission.origin.lon, mission.origin.alt, current_time])
         velocities.append(mission.origin.speed)
-        timestamps.append(current_time)
+        timestamps.append(int(current_time))
         planner_steps.append({
             "step": 0,
             "action": "origin",
@@ -57,7 +55,7 @@ class DronePlanner:
 
             positions.append([waypoint.lat, waypoint.lon, waypoint.alt, current_time])
             velocities.append(waypoint.speed)
-            timestamps.append(current_time)
+            timestamps.append(int(current_time))
 
             action = "destination" if i == len(all_points) - 1 else "waypoint"
             planner_steps.append({
@@ -153,7 +151,7 @@ class AIPlanner:
         timestamps = []
         planner_steps = []
 
-        current_time = int(time.time())
+        current_time: float = float(time.time())
 
         # Start point
         positions.append([
@@ -163,7 +161,7 @@ class AIPlanner:
             current_time
         ])
         velocities.append(mission.origin.speed)
-        timestamps.append(current_time)
+        timestamps.append(int(current_time))
         planner_steps.append({"step": 0, "action": "origin", "lat": mission.origin.lat, "lon": mission.origin.lon, "alt": mission.origin.alt, "timestamp": current_time})
 
         # AI optimization: adjust waypoints based on learned weights
@@ -175,7 +173,7 @@ class AIPlanner:
             )
             positions.append([*optimized_pos, current_time])
             velocities.append(self._optimized_speed(waypoint.speed))
-            timestamps.append(current_time)
+            timestamps.append(int(current_time))
             action = "destination" if i == len(all_points) - 1 else "waypoint"
             planner_steps.append({"step": i+1, "action": action, "lat": optimized_pos[0], "lon": optimized_pos[1], "alt": optimized_pos[2], "timestamp": current_time})
 

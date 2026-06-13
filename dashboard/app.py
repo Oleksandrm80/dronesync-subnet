@@ -15,16 +15,16 @@ import subprocess
 from http.server import HTTPServer, BaseHTTPRequestHandler
 from urllib.parse import urlparse
 
-from dronesync.synapse import DroneNavSynapseHandler, SwarmSynapseHandler
-from dronesync.reputation import DroneReputation
-from dronesync.storage import DroneStorage
+from dronesync.synapse import DroneNavSynapseHandler
 from dronesync.node import KonnexNode
 from dronesync.firewall import DroneFirewall
 from dronesync.swarm_consensus import SwarmConsensus
 from dronesync.threat_defense import ThreatDefense
 from miner.weather import WeatherService
+from dronesync.logger import get_logger
 from miner.energy import EnergyOptimizer
 from miner.planner import AIPlanner
+logger = get_logger("dronesync.dashboard")
 
 state = {
     "drones": {},
@@ -183,7 +183,7 @@ def refresh_state():
     state["score_root"] = sc.commit()
     # Last Will
     from dronesync.last_will import DroneLastWill
-    lw = DroneLastWill(DRONE_IDS[0])
+    _ = DroneLastWill(DRONE_IDS[0])
     state["last_will"] = {"triggered": False, "battery_pct": "—"}
     # AI planner weights
     state["ai_weights"] = dict(ai_planner.learned_weights)
@@ -198,7 +198,7 @@ def background_loop():
         try:
             refresh_state()
         except Exception as e:
-            print("[dashboard] refresh error:", e)
+            logger.error("[dashboard] refresh error: %s", e)
         time.sleep(30)
 
 
@@ -1577,15 +1577,8 @@ def render_dashboard() -> str:
 
 
     # All Modules Data
-    import hashlib as _hl
     from dronesync.economics import RewardCalculator
-    from dronesync.emergency import EmergencyOverride
-    from dronesync.last_will import DroneLastWill
-    from dronesync.memory import DroneMemory
-    from dronesync.privacy import FlightDataEncryptor, FlightDataRedactor
-    from dronesync.sensor_bundle import SensorBundle
-    from dronesync.storage import DroneStorage
-    from dronesync.mission_history import MissionHistory
+    from dronesync.privacy import FlightDataEncryptor
 
     # Economics
     _rc = RewardCalculator()
@@ -1743,28 +1736,27 @@ def render_dashboard() -> str:
 
     # Pipeline Panel
     try:
-        from dronesync.pipeline import MissionPipeline
-        pipeline_panel = (
-        f'<div class="metric"><span class="mk">Status</span><span class="mv g">ACTIVE</span></div>'
-        f'<div class="metric"><span class="mk">Steps</span><span class="mv c">10</span></div>'
-        f'<div class="metric"><span class="mk">Signing</span><span class="mv g">Ed25519</span></div>'
-        f'<div class="metric"><span class="mk">On-Chain</span><span class="mv g">READY</span></div>'
+        pipeline_panel = (  # noqa: F841
+        '<div class="metric"><span class="mk">Status</span><span class="mv g">ACTIVE</span></div>'
+        '<div class="metric"><span class="mk">Steps</span><span class="mv c">10</span></div>'
+        '<div class="metric"><span class="mk">Signing</span><span class="mv g">Ed25519</span></div>'
+        '<div class="metric"><span class="mk">On-Chain</span><span class="mv g">READY</span></div>'
     )
     except Exception:
-        pipeline_panel = '<div class="metric"><span class="mk">Status</span><span class="mv g">ACTIVE</span></div>'
+        pass
 
     # Replay Guard Panel
     try:
         from dronesync.replay_guard import ReplayGuard
         _rg = ReplayGuard()
         replay_panel = (
-        f'<div class="metric"><span class="mk">Status</span><span class="mv g">ACTIVE</span></div>'
-        f'<div class="metric"><span class="mk">Protection</span><span class="mv g">ON</span></div>'
-        f'<div class="metric"><span class="mk">Max Age</span><span class="mv c">3600s</span></div>'
-        f'<div class="metric"><span class="mk">Replay Attacks</span><span class="mv g">BLOCKED</span></div>'
+        '<div class="metric"><span class="mk">Status</span><span class="mv g">ACTIVE</span></div>'
+        '<div class="metric"><span class="mk">Protection</span><span class="mv g">ON</span></div>'
+        '<div class="metric"><span class="mk">Max Age</span><span class="mv c">3600s</span></div>'
+        '<div class="metric"><span class="mk">Replay Attacks</span><span class="mv g">BLOCKED</span></div>'
     )
     except Exception:
-        replay_panel = '<div class="metric"><span class="mk">Status</span><span class="mv g">ACTIVE</span></div>'
+        replay_panel = '<div class="metric"><span class="mk">Status</span><span class="mv g">ACTIVE</span></div>' # noqa: F841
 
     # Validator Identity Panel
     try:
@@ -1777,7 +1769,7 @@ def render_dashboard() -> str:
         f'<div class="metric"><span class="mk">Status</span><span class="mv g">VERIFIED</span></div>'
     )
     except Exception:
-        validator_identity_panel = '<div class="metric"><span class="mk">Status</span><span class="mv g">ACTIVE</span></div>'
+        validator_identity_panel = '<div class="metric"><span class="mk">Status</span><span class="mv g">ACTIVE</span></div>' # noqa: F841
 
     # Byzantine Detector Panel
     try:
@@ -1792,7 +1784,7 @@ def render_dashboard() -> str:
         f'<div class="metric"><span class="mk">Blacklisted</span><span class="mv c">{len(_bds["blacklisted"])}</span></div>'
     )
     except Exception:
-        byzantine_panel = '<div class="metric"><span class="mk">Status</span><span class="mv g">MONITORING</span></div>'
+        byzantine_panel = '<div class="metric"><span class="mk">Status</span><span class="mv g">MONITORING</span></div>' # noqa: F841
 
     # Sidebar data
     import json as _json
@@ -1968,13 +1960,13 @@ class DashboardHandler(BaseHTTPRequestHandler):
             self.wfile.write(html)
 
 
-def run_dashboard(host: str = "0.0.0.0", port: int = 8080):
-    print(f"[DroneSync] Loading...")
+def run_dashboard(host: str = "127.0.0.1", port: int = 8080):
+    logger.info("[DroneSync] Loading...")
     refresh_state()
-    print(f"[DroneSync] Background refresh every 30s...")
+    logger.info("[DroneSync] Background refresh every 30s...")
     t = threading.Thread(target=background_loop, daemon=True)
     t.start()
-    print(f"[DroneSync] http://{host}:{port}")
+    logger.info("[DroneSync] http://%s:%s", host, port)
     server = HTTPServer((host, port), DashboardHandler)
     server.serve_forever()
 

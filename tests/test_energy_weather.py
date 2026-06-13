@@ -1,5 +1,4 @@
 """Tests for energy optimizer and weather modules."""
-import pytest
 from miner.energy import BatteryModel, EnergyOptimizer
 from miner.weather import WeatherService, WeatherCondition, WeatherImpactAnalyzer
 

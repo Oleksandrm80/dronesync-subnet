@@ -3,6 +3,7 @@ DroneSync - Energy Optimizer Module
 Battery consumption modeling and route optimization
 Critical for real-world drone operations
 """
+from typing import Optional
 import math
 
 
@@ -44,7 +45,7 @@ class EnergyOptimizer:
     Balances speed, altitude, and path length.
     """
 
-    def __init__(self, battery: BatteryModel = None):
+    def __init__(self, battery: Optional["BatteryModel"] = None):
         self.battery = battery or BatteryModel()
 
     def analyze_trajectory(self, positions: list,

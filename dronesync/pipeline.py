@@ -14,6 +14,7 @@ FULL CHAIN:
   9. PoPW signed (asymmetric)
  10. Reputation updated
 """
+from typing import Optional
 import time
 import hashlib
 import json
@@ -22,7 +23,6 @@ import math
 from dronesync.protocol import MissionInstruction, Trajectory, SensorData
 from dronesync.verifier import PoPWRecord
 from dronesync.swarm_consensus import SwarmConsensus
-from dronesync.reputation import DroneReputation
 from dronesync.threat_defense import ThreatDefense
 from dronesync.sensor_bundle import SensorBundle
 from validator.scoreroot import ScoreRoot
@@ -40,14 +40,14 @@ def _haversine_km(lat1, lon1, lat2, lon2) -> float:
 
 
 class MissionPipeline:
-    def __init__(self, drone_ids: list = None, drone_reputations: dict = None):
+    def __init__(self, drone_ids: Optional[list] = None, drone_reputations: Optional[dict] = None):
         self.drone_ids = drone_ids or ["DRONE_001"]
         self.drone_reputations = drone_reputations or {}
         self.consensus = SwarmConsensus(self.drone_ids)
         self.threat = ThreatDefense()
         self.popw = PoPWRecord()
         self.score_root = ScoreRoot(validator_id="pipeline_validator")
-        self._pipeline_log = []
+        self._pipeline_log: list = []
 
         for drone_id, rep in self.drone_reputations.items():
             status = rep.get_status()
@@ -59,7 +59,7 @@ class MissionPipeline:
 
         start_time = time.time()
         self._pipeline_log = []
-        checks = {}
+        checks: dict = {}
 
         # 1. Mission fingerprint
         mission_fingerprint = hashlib.sha256(

@@ -19,8 +19,8 @@ QUORUM = 0.51
 class SwarmConsensus:
     def __init__(self, drone_ids: list):
         self.drone_ids = drone_ids
-        self.blacklist = []
-        self.votes_log = []
+        self.blacklist: list = []
+        self.votes_log: list = []
         self._reputation: dict = {}
 
     def register_drone_reputation(self, drone_id: str, tier: str):
@@ -112,7 +112,7 @@ class SwarmConsensus:
 
     def get_swarm_status(self) -> dict:
         active_drones = [d for d in self.drone_ids if d not in self.blacklist]
-        tier_distribution = {}
+        tier_distribution: dict = {}
         for drone_id in active_drones:
             tier = self._reputation.get(drone_id, "ROOKIE")
             tier_distribution[tier] = tier_distribution.get(tier, 0) + 1
@@ -139,9 +139,9 @@ class ByzantineDetector:
     SUSPICION_THRESHOLD = 3   # votes against majority before flagged
     BYZANTINE_THRESHOLD = 5   # votes against majority before blacklisted
 
-    def __init__(self, consensus: SwarmConsensus = None):
+    def __init__(self, consensus: "SwarmConsensus"):
         self.consensus = consensus
-        self._against_majority = {}  # drone_id -> count
+        self._against_majority: dict = {}  # drone_id -> count
 
     def analyze(self, vote_result: dict, votes: list) -> dict:
         """

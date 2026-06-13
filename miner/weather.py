@@ -3,7 +3,6 @@ DroneSync - Weather Module
 Real-time weather impact on drone flight operations
 Affects trajectory planning, safety scores, and mission clearance
 """
-import math
 import random
 
 

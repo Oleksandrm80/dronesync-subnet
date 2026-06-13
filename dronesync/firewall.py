@@ -2,6 +2,7 @@
 DroneSync - Drone Firewall
 Filters all incoming commands. Blocks anomalies and logs attempts in PoPW.
 """
+from typing import Optional
 import time
 import hashlib
 import hmac
@@ -17,17 +18,17 @@ class DroneFirewall:
     MAX_COMMANDS_PER_MINUTE = 20
     ALLOWED_ACTIONS = {"fly", "hover", "land", "return_home", "scan", "deliver", "execute_task"}
 
-    def __init__(self, drone_id: str, secret_key: str = None):
+    def __init__(self, drone_id: str, secret_key: Optional[str] = None):
         self.drone_id = drone_id
-        self.blocked_log = []
-        self.allowed_log = []
-        self._command_times = []
-        self.trusted_sources = set()
+        self.blocked_log: list = []
+        self.allowed_log: list = []
+        self._command_times: list = []
+        self.trusted_sources: set = set()
         import os
         self._secret = (secret_key or os.urandom(32).hex()).encode()
         self._admin_token = os.urandom(16).hex()
 
-    def add_trusted_source(self, source_id: str, admin_token: str = None) -> dict:
+    def add_trusted_source(self, source_id: str, admin_token: Optional[str] = None) -> dict:
         """Add a trusted source. Requires admin_token to prevent unauthorized bypass."""
         if not admin_token or admin_token != self._admin_token:
             return {"status": "DENIED", "reason": "invalid_admin_token"}
@@ -63,7 +64,8 @@ class DroneFirewall:
             json.dumps(cmd_copy, sort_keys=True).encode(),
             hashlib.sha256
         ).hexdigest()
-        if not hmac.compare_digest(command["signature"], expected_sig):
+        sig = command.get("signature")
+        if not isinstance(sig, str) or not hmac.compare_digest(sig, expected_sig):
             return self._block(command, "invalid_signature")
         # Check 3: stale command (older than 30 seconds)
         now = int(time.time())

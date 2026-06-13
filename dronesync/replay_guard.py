@@ -17,7 +17,8 @@ class ReplayGuard:
     MAX_AGE_SECONDS = 3600  # mission older than 1 hour is rejected
 
     def __init__(self, persist_path: str = ".dronesync_data/replay_guard.json"):
-        import os, json
+        import os
+        import json
         self._persist_path = persist_path
         os.makedirs(os.path.dirname(persist_path), exist_ok=True)
         if os.path.exists(persist_path):

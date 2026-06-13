@@ -11,7 +11,8 @@ DroneSync pipeline (planner → env → TEE → PoPW) и возвращает
 import time
 import hashlib
 import json
-from typing import Optional, Dict, Any
+import hmac as _hmac
+from typing import Dict, Any
 
 from miner.planner import DronePlanner, AIPlanner
 from environment.sim import DroneEnvironment
@@ -31,12 +32,30 @@ from miner.weather import WeatherService
 class MissionAdapter:
     """Конвертирует DroneNavSynapse task → внутренний формат DroneSync."""
 
-    def from_synapse_task(self, task: Dict) -> object:
+    def from_synapse_task(self, task: Dict) -> Any:
+        if not isinstance(task, dict):
+            task = {}
         origin_raw = task.get("origin", {})
         dest_raw = task.get("destination", {})
-        def _clamp_lat(v): return max(-90.0, min(90.0, float(v)))
-        def _clamp_lon(v): return max(-180.0, min(180.0, float(v)))
-        def _clamp_alt(v): return max(0.0, min(500.0, float(v)))
+        if not isinstance(origin_raw, dict):
+            origin_raw = {}
+        if not isinstance(dest_raw, dict):
+            dest_raw = {}
+        def _clamp_lat(v):
+            try:
+                return max(-90.0, min(90.0, float(v)))
+            except (TypeError, ValueError):
+                return 47.3769
+        def _clamp_lon(v):
+            try:
+                return max(-180.0, min(180.0, float(v)))
+            except (TypeError, ValueError):
+                return 8.5417
+        def _clamp_alt(v):
+            try:
+                return max(0.0, min(500.0, float(v)))
+            except (TypeError, ValueError):
+                return 50.0
 
         origin = type("Waypoint", (), {
             "lat": _clamp_lat(origin_raw.get("lat", 47.3769)),
@@ -54,6 +73,8 @@ class MissionAdapter:
 
         waypoints = []
         for wp in task.get("waypoints", []):
+            if not isinstance(wp, dict):
+                continue
             waypoints.append(type("Waypoint", (), {
                 "lat": _clamp_lat(wp.get("lat", 47.3780)),
                 "lon": _clamp_lon(wp.get("lon", 8.5430)),
@@ -105,141 +126,144 @@ class DroneNavSynapseHandler:
         """
         Принимает задание от валидатора, выполняет полный DroneSync pipeline,
         возвращает PoPW артефакт.
-
-        Args:
-            synapse_task: словарь с полями task_id, origin, destination, ...
-
-        Returns:
-            dict с полями: mission_id, score, trajectory_hash, sensor_hash,
-                           bundle_hash, tee_status, popw, on_chain_ready
         """
-        t_start = time.time()
+        if not isinstance(synapse_task, dict):
+            return {"status": "REJECTED", "reason": "invalid_input_type", "on_chain_ready": False}
 
-        # 1. Firewall check — проверяем что команда легитимна
-        import json, hmac as _hmac, hashlib as _hl
-        cmd = {
-            "action": "execute_task",
-            "source": "konnex_validator",
-            "timestamp": int(time.time()),
-        }
-        cmd["signature"] = _hmac.new(
-            self.firewall._secret,
-            json.dumps(cmd, sort_keys=True).encode(),
-            _hl.sha256
-        ).hexdigest()
-        fw_result = self.firewall.filter(cmd)
-        if fw_result["status"] == "BLOCKED":
-            return {
-                "mission_id": synapse_task.get("task_id", "unknown"),
-                "status": "BLOCKED",
-                "reason": fw_result["reason"],
-                "on_chain_ready": False,
+        try:
+            t_start = time.time()
+
+            # 1. Firewall check
+            cmd = {
+                "action": "execute_task",
+                "source": "konnex_validator",
+                "timestamp": int(time.time()),
             }
+            cmd["signature"] = _hmac.new(
+                self.firewall._secret,
+                json.dumps(cmd, sort_keys=True).encode(),
+                hashlib.sha256
+            ).hexdigest()
+            fw_result = self.firewall.filter(cmd)
+            if fw_result["status"] == "BLOCKED":
+                return {
+                    "mission_id": synapse_task.get("task_id", "unknown"),
+                    "status": "BLOCKED",
+                    "reason": fw_result["reason"],
+                    "on_chain_ready": False,
+                }
 
-        # 2. Конвертируем задание
-        mission = self.adapter.from_synapse_task(synapse_task)
-        rg_check = self.replay_guard.check(
-            mission.mission_id, float(synapse_task.get("created_at", time.time()))
-        )
-        if not rg_check["allowed"]:
-            return {"status": "REJECTED", "reason": rg_check["reason"],
-                    "mission_id": mission.mission_id}
+            # 2. Конвертируем задание
+            mission = self.adapter.from_synapse_task(synapse_task)
+            rg_check = self.replay_guard.check(
+                mission.mission_id, float(synapse_task.get("created_at", time.time()))
+            )
+            if not rg_check["allowed"]:
+                return {"status": "REJECTED", "reason": rg_check["reason"],
+                        "mission_id": mission.mission_id}
 
-        # 3. Планируем траекторию
-        trajectory = self.planner.plan_trajectory(mission)
+            # 3. Планируем траекторию
+            trajectory = self.planner.plan_trajectory(mission)
 
-        # 4. Запускаем симуляцию среды (сенсоры, препятствия, погода)
-        sensor_data = self.env.run(trajectory)
+            # 4. Запускаем симуляцию среды
+            sensor_data = self.env.run(trajectory)
 
-        # 5. Оцениваем траекторию
-        score = self.evaluator.score(trajectory, sensor_data)
-        replay = self.evaluator.replay_validate(trajectory)
+            # 5. Оцениваем траекторию
+            score = self.evaluator.score(trajectory, sensor_data)
+            replay = self.evaluator.replay_validate(trajectory)
 
-        # 6. Проверка безопасности (GPS spoofing, hijacking, threat level)
-        security_result = self.security.full_security_check(trajectory, score)
-        threat_result = self.defense.full_threat_assessment(
-            trajectory.positions,
-            signal_strength=0.92
-        )
+            # 6. Проверка безопасности
+            security_result = self.security.full_security_check(trajectory, score)
+            threat_result = self.defense.full_threat_assessment(
+                trajectory.positions,
+                signal_strength=0.92
+            )
 
-        # 7. Создаём PoPW запись (TEE attestation)
-        popw = PoPWRecord()
-        record = popw.create_record(
-            mission_id=mission.mission_id,
-            trajectory=trajectory,
-            score=score,
-        )
+            # 7. Создаём PoPW запись
+            popw = PoPWRecord()
+            record = popw.create_record(
+                mission_id=mission.mission_id,
+                trajectory=trajectory,
+                score=score,
+            )
 
-        # 8. Упаковываем сенсорный бандл (evidence package)
-        bundle = SensorBundle().pack(
-            mission_id=mission.mission_id,
-            trajectory=trajectory,
-            sensor_data=sensor_data,
-            popw_record=record,
-        )
+            # 8. Упаковываем сенсорный бандл
+            bundle = SensorBundle().pack(
+                mission_id=mission.mission_id,
+                trajectory=trajectory,
+                sensor_data=sensor_data,
+                popw_record=record,
+            )
 
-        # 9. Обновляем память и репутацию дрона
-        mission_safe = security_result.get("mission_cleared", True)
-        current_weather = self.weather.get_current()
-        self.memory.record_flight(
-            trajectory.positions,
-            duration_s=round(time.time() - t_start, 2),
-            wind_ms=current_weather.wind_speed,
-        )
-        self.reputation.record_mission(
-            mission.mission_id, score, mission_safe, battery_used_pct=7.5
-        )
+            # 9. Обновляем память и репутацию
+            mission_safe = security_result.get("mission_cleared", True)
+            current_weather = self.weather.get_current()
+            self.memory.record_flight(
+                trajectory.positions,
+                duration_s=round(time.time() - t_start, 2),
+                wind_ms=current_weather.wind_speed,
+            )
+            self.reputation.record_mission(
+                mission.mission_id, score, mission_safe, battery_used_pct=7.5
+            )
 
-        # 10. Сохраняем в персистентное хранилище
-        self.storage.append_mission({
-            "mission_id": mission.mission_id,
-            "score": score,
-            "duration_s": round(time.time() - t_start, 2),
-            "timestamp": int(time.time()),
-        })
+            # 10. Сохраняем в персистентное хранилище
+            self.storage.append_mission({
+                "mission_id": mission.mission_id,
+                "score": score,
+                "duration_s": round(time.time() - t_start, 2),
+                "timestamp": int(time.time()),
+            })
 
-        if isinstance(self.planner, AIPlanner):
-            self.planner.learn_from_score(score)
+            if isinstance(self.planner, AIPlanner):
+                self.planner.learn_from_score(score)
 
-        duration = round(time.time() - t_start, 3)
+            duration = round(time.time() - t_start, 3)
 
-        return {
-            "mission_id": mission.mission_id,
-            "status": "OK",
-            "score": score,
-            "replay_status": replay["status"],
-            "replay_steps": replay.get("steps_count", 0),
-            "trajectory_hash": record["trajectory_hash"],
-            "sensor_hash": bundle["sensor_hash"],
-            "bundle_hash": bundle["bundle_hash"],
-            "tee_status": bundle["popw"]["tee_status"],
-            "attestation_id": record["attestation"]["attestation_id"],
-            "security": {
-                "overall_status": security_result["overall_status"],
-                "threat_level": threat_result["overall_threat_level"],
-                "mission_safe": mission_safe,
-            },
-            "reputation": self.reputation.get_status(),
-            "popw": record,
-            "on_chain_ready": record["on_chain_ready"] and bundle["on_chain_ready"],
-            "proof_package": {
+            return {
+                "mission_id": mission.mission_id,
+                "status": "OK",
+                "score": score,
+                "replay_status": replay["status"],
+                "replay_steps": replay.get("steps_count", 0),
                 "trajectory_hash": record["trajectory_hash"],
                 "sensor_hash": bundle["sensor_hash"],
-                "score": score,
+                "bundle_hash": bundle["bundle_hash"],
+                "tee_status": bundle["popw"]["tee_status"],
                 "attestation_id": record["attestation"]["attestation_id"],
-                "chain_string": "PROOF|" + mission.mission_id + "|" +
-                    record["trajectory_hash"][:16] + "|" +
-                    bundle["sensor_hash"][:16] + "|" +
-                    str(score),
-            },
-            "duration_s": duration,
-        }
+                "security": {
+                    "overall_status": security_result["overall_status"],
+                    "threat_level": threat_result["overall_threat_level"],
+                    "mission_safe": mission_safe,
+                },
+                "reputation": self.reputation.get_status(),
+                "popw": record,
+                "on_chain_ready": record["on_chain_ready"] and bundle["on_chain_ready"],
+                "proof_package": {
+                    "trajectory_hash": record["trajectory_hash"],
+                    "sensor_hash": bundle["sensor_hash"],
+                    "score": score,
+                    "attestation_id": record["attestation"]["attestation_id"],
+                    "chain_string": "PROOF|" + mission.mission_id + "|" +
+                        record["trajectory_hash"][:16] + "|" +
+                        bundle["sensor_hash"][:16] + "|" +
+                        str(score),
+                },
+                "duration_s": duration,
+            }
+
+        except Exception as e:
+            return {
+                "mission_id": synapse_task.get("task_id", "unknown"),
+                "status": "ERROR",
+                "reason": str(e),
+                "on_chain_ready": False,
+            }
 
 
 class SwarmSynapseHandler:
     """
-    Обработчик заданий для роя дронов (несколько экземпляров DroneNavSynapse).
-    Добавляет децентрализованное голосование SwarmConsensus.
+    Обработчик заданий для роя дронов.
     """
 
     def __init__(self, drone_ids: list):
@@ -255,7 +279,6 @@ class SwarmSynapseHandler:
         for drone_id, handler in self.handlers.items():
             results[drone_id] = handler.handle(synapse_task)
 
-        # Голосование по маршруту — одобряют дроны с score >= 80
         votes = [
             (d, results[d]["score"] >= 80)
             for d in self.drone_ids
@@ -292,7 +315,6 @@ def demo_synapse():
     print("KONNEX DroneNavSynapse → DroneSync ADAPTER")
     print("=" * 55)
 
-    # Имитируем задание от валидатора Konnex
     validator_task = {
         "task_id": "KNX_TASK_" + str(int(time.time())),
         "mission_type": "urban_delivery",
@@ -309,7 +331,6 @@ def demo_synapse():
     print("validator_task_id: " + validator_task["task_id"])
     print()
 
-    # Одиночный дрон
     handler = DroneNavSynapseHandler(drone_id="DRONE_001", use_ai_planner=True)
     response = handler.handle(validator_task)
 
@@ -331,7 +352,6 @@ def demo_synapse():
     print("  duration_s:      " + str(response["duration_s"]))
     print()
 
-    # Рой из 3 дронов
     print("SWARM (3 DRONES) RESPONSE:")
     swarm = SwarmSynapseHandler(drone_ids=["drone_0", "drone_1", "drone_2"])
 

@@ -37,7 +37,9 @@ def test_reputation_on_chain_ready():
 # --- Firewall ---
 
 def test_firewall_allows_valid_command():
-    import json, hmac, hashlib
+    import json
+    import hmac
+    import hashlib
     fw = DroneFirewall("DRONE_001")
     cmd = {"action": "fly", "source": "op", "timestamp": int(time.time())}
     cmd_copy = {k: v for k, v in cmd.items() if k != "signature"}
@@ -60,7 +62,9 @@ def test_firewall_blocks_unknown_action():
     assert result["reason"] == "unknown_action"
 
 def test_firewall_blocks_stale_command():
-    import json, hmac, hashlib
+    import json
+    import hmac
+    import hashlib
     fw = DroneFirewall("DRONE_001")
     cmd = {"action": "fly", "source": "op", "timestamp": int(time.time()) - 60}
     cmd_copy = {k: v for k, v in cmd.items() if k != "signature"}

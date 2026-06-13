@@ -5,7 +5,7 @@ DroneSync Subnet — Core Protocol Definitions
 
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import List, Optional, Dict, Any
+from typing import List, Optional, Dict
 import time
 
 
@@ -94,7 +94,7 @@ class DroneSyncSynapse:
     In production: inherits from bittensor.Synapse.
     """
 
-    def __init__(self, mission: "MissionInstruction" = None):
+    def __init__(self, mission: Optional["MissionInstruction"] = None):
         self.mission = mission
         self.trajectory: Optional[Trajectory] = None
         self.sensor_data: Optional[SensorData] = None

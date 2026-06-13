@@ -3,6 +3,7 @@ DroneSync - Threat Defense Module
 Based on real-world drone attack vectors (2022-2026)
 Protects against known attack patterns
 """
+from typing import Optional
 import hashlib
 import time
 import math
@@ -155,7 +156,7 @@ class ThreatDefense:
                                 drone_id: str = "drone_0",
                                 mission_id: str = "mission",
                                 signal_strength: float = 0.9,
-                                peer_signature: str = None) -> dict:
+                                peer_signature: Optional[str] = None) -> dict:
         """Complete threat assessment combining all checks."""
         gps_result = self.analyze_gps_pattern(positions)
         jamming_result = self.check_jamming(signal_strength)
@@ -186,8 +187,8 @@ class ThreatDefense:
         }
 
     def cross_validate_sensors(self, gps_positions: list,
-                                imu_data: dict = None,
-                                peer_positions: list = None) -> dict:
+                                imu_data: Optional[dict] = None,
+                                peer_positions: Optional[list] = None) -> dict:
         warnings = []
         if imu_data and gps_positions:
             imu_speed = imu_data.get("speed_ms", 0)

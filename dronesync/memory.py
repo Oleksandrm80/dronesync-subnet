@@ -3,6 +3,7 @@ DroneSync - Drone Memory
 Each drone accumulates flight experience stored on-chain.
 Experience is an asset — a drone with 1000 hours is worth more than a new one.
 """
+from typing import Optional
 import hashlib
 import time
 
@@ -16,14 +17,14 @@ class DroneMemory:
 
     def __init__(self, drone_id: str):
         self.drone_id = drone_id
-        self.dangerous_zones = []
-        self.wind_patterns = []
-        self.obstacle_encounters = []
+        self.dangerous_zones: list = []
+        self.wind_patterns: list = []
+        self.obstacle_encounters: list = []
         self.total_flight_hours = 0.0
         self.missions_completed = 0
 
     def record_flight(self, positions: list, duration_s: float,
-                      obstacles: list = None, wind_ms: float = 0.0):
+                      obstacles: Optional[list] = None, wind_ms: float = 0.0):
         """Record flight experience after each mission."""
         self.total_flight_hours += duration_s / 3600
         self.missions_completed += 1

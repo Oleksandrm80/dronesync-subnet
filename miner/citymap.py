@@ -4,7 +4,6 @@ Real urban data integration via OpenStreetMap (Overpass API)
 Provides no-fly zones, building heights, and urban obstacles
 """
 import math
-import random
 
 
 class CityZone:
@@ -61,7 +60,7 @@ class CityMap:
 
     def __init__(self, city: str = "zurich"):
         self.city = city
-        self.profile = self.CITY_PROFILES.get(city, self.CITY_PROFILES["zurich"])
+        self.profile: dict = self.CITY_PROFILES.get(city, self.CITY_PROFILES["zurich"])
         self.zones = self._load_zones()
 
     def _load_zones(self) -> list:

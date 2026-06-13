@@ -8,7 +8,7 @@ from miner.citymap import CityMap
 from environment.sim import DroneEnvironment, SwarmEnvironment
 from validator.scorer import DroneEvaluator
 from validator.scoreroot import ScoreRoot
-from dronesync.verifier import TEEAttestation, PoPWRecord
+from dronesync.verifier import PoPWRecord
 from dronesync.security import DroneSecuritySuite, CommandSigner
 from miner.weather import WeatherService, WeatherImpactAnalyzer
 from miner.energy import EnergyOptimizer, BatteryModel
@@ -20,7 +20,8 @@ from dronesync.swarm_consensus import SwarmConsensus
 from dronesync.emergency import EmergencyOverride
 from dronesync.storage import DroneStorage
 from dronesync.sensor_bundle import SensorBundle
-
+from dronesync.logger import get_logger
+logger = get_logger("dronesync.main")
 
 class FakeMission:
     def __init__(self, origin=(47.3769, 8.5417), destination=(47.3800, 8.5450)):
@@ -38,35 +39,35 @@ class FakeMission:
 
 
 def run_single_drone():
-    print("=" * 50)
-    print("SINGLE DRONE MISSION")
-    print("=" * 50)
+    logger.info("=" * 50)
+    logger.info("SINGLE DRONE MISSION")
+    logger.info("=" * 50)
     mission = FakeMission()
     planner = DronePlanner()
     trajectory = planner.plan_trajectory(mission)
-    print("trajectory created")
+    logger.info("trajectory created")
     steps = trajectory.metadata.get("planner_steps", [])
-    print("planner_steps: " + str(len(steps)))
+    logger.info("planner_steps: " + str(len(steps)))
     for s in steps:
-        print("  step " + str(s["step"]) + ": " + s["action"] +
+        logger.info("  step " + str(s["step"]) + ": " + s["action"] +
               " lat=" + str(s["lat"]) + " lon=" + str(s["lon"]))
     env = DroneEnvironment()
     sensor_data = env.run(trajectory)
-    print("environment simulation done")
+    logger.info("environment simulation done")
     validator = DroneEvaluator()
     score = validator.score(trajectory, sensor_data)
-    print("score computed:", score)
+    logger.info("score computed: %s", score)
     replay = validator.replay_validate(trajectory)
-    print("replay_validation: " + replay["status"] +
+    logger.info("replay_validation: " + replay["status"] +
           " | steps=" + str(replay.get("steps_count", 0)) +
           " | " + replay["reason"])
-    print()
+    logger.info("")
 
 
 def run_swarm():
-    print("=" * 50)
-    print("SWARM MISSION - 3 DRONES")
-    print("=" * 50)
+    logger.info("=" * 50)
+    logger.info("SWARM MISSION - 3 DRONES")
+    logger.info("=" * 50)
     missions = [
         FakeMission(origin=(47.3769, 8.5417), destination=(47.3820, 8.5460)),
         FakeMission(origin=(47.3775, 8.5420), destination=(47.3825, 8.5465)),
@@ -74,23 +75,23 @@ def run_swarm():
     ]
     planner = DronePlanner()
     trajectories = [planner.plan_trajectory(m) for m in missions]
-    print(str(len(trajectories)) + " trajectories planned")
+    logger.info(str(len(trajectories)) + " trajectories planned")
     swarm = SwarmEnvironment(n_drones=3)
     results = swarm.run_swarm(trajectories)
     for drone_id, result in results.items():
         status = result["status"]
         predicted = result["conflicts_predicted"]
         maneuvers = len(result["avoidance_maneuvers"])
-        print(drone_id + ": status=" + status +
+        logger.info(drone_id + ": status=" + status +
               ", conflicts_predicted=" + str(predicted) +
               ", avoidance_maneuvers=" + str(maneuvers))
-    print()
+    logger.info("")
 
 
 def run_ai_planner():
-    print("=" * 50)
-    print("AI PLANNER - LEARNING MODE")
-    print("=" * 50)
+    logger.info("=" * 50)
+    logger.info("AI PLANNER - LEARNING MODE")
+    logger.info("=" * 50)
     ai_planner = AIPlanner()
     validator = DroneEvaluator()
     env = DroneEnvironment()
@@ -101,40 +102,40 @@ def run_ai_planner():
         score = validator.score(trajectory, sensor_data)
         ai_planner.learn_from_score(score)
         weights = ai_planner.learned_weights
-        print("mission " + str(i+1) + ": score=" + str(score) +
+        logger.info("mission " + str(i+1) + ": score=" + str(score) +
               " | safety=" + str(round(weights["safety"], 2)) +
               " efficiency=" + str(round(weights["efficiency"], 2)))
-    print("AI planner trained on 3 missions")
-    print()
+    logger.info("AI planner trained on 3 missions")
+    logger.info("")
 
 
 def run_city_map():
-    print("=" * 50)
-    print("CITY MAP - ZURICH URBAN AIRSPACE")
-    print("=" * 50)
+    logger.info("=" * 50)
+    logger.info("CITY MAP - ZURICH URBAN AIRSPACE")
+    logger.info("=" * 50)
     city = CityMap(city="zurich")
     stats = city.get_city_stats()
-    print("city: " + stats["city"])
-    print("no-fly zones: " + str(stats["no_fly_zones"]))
-    print("zone types: " + str(stats["zone_types"]))
+    logger.info("city: " + stats["city"])
+    logger.info("no-fly zones: " + str(stats["no_fly_zones"]))
+    logger.info("zone types: " + str(stats["zone_types"]))
     test_points = [
         (47.3769, 8.5417, "city center"),
         (47.4647, 8.5492, "near airport"),
         (47.3744, 8.5373, "near hospital"),
     ]
-    print()
+    logger.info("")
     for lat, lon, name in test_points:
         no_fly, reason = city.is_no_fly(lat, lon)
         safe_alt = city.safe_altitude(lat, lon)
         status = "NO-FLY: " + str(reason) if no_fly else "CLEAR"
-        print(name + ": " + status + " | safe_alt=" + str(safe_alt) + "m")
-    print()
+        logger.info(name + ": " + status + " | safe_alt=" + str(safe_alt) + "m")
+    logger.info("")
 
 
 def run_tee():
-    print("=" * 50)
-    print("TEE ATTESTATION - PoPW RECORD")
-    print("=" * 50)
+    logger.info("=" * 50)
+    logger.info("TEE ATTESTATION - PoPW RECORD")
+    logger.info("=" * 50)
     mission = FakeMission()
     planner = DronePlanner()
     trajectory = planner.plan_trajectory(mission)
@@ -148,21 +149,21 @@ def run_tee():
         trajectory=trajectory,
         score=score
     )
-    print("mission_id: " + record["mission_id"])
-    print("score: " + str(record["score"]))
-    print("trajectory_hash: " + record["trajectory_hash"][:16] + "...")
-    print("attestation: " + record["attestation"]["attestation_id"])
-    print("tee_status: " + record["attestation"]["status"])
-    print("on_chain_ready: " + str(record["on_chain_ready"]))
+    logger.info("mission_id: " + record["mission_id"])
+    logger.info("score: " + str(record["score"]))
+    logger.info("trajectory_hash: " + record["trajectory_hash"][:16] + "...")
+    logger.info("attestation: " + record["attestation"]["attestation_id"])
+    logger.info("tee_status: " + record["attestation"]["status"])
+    logger.info("on_chain_ready: " + str(record["on_chain_ready"]))
     chain_str = popw.format_for_chain(record)
-    print("on-chain string: " + chain_str)
-    print()
+    logger.info("on-chain string: " + chain_str)
+    logger.info("")
 
 
 def run_security():
-    print("=" * 50)
-    print("SECURITY SUITE - THREAT DETECTION")
-    print("=" * 50)
+    logger.info("=" * 50)
+    logger.info("SECURITY SUITE - THREAT DETECTION")
+    logger.info("=" * 50)
     mission = FakeMission()
     planner = DronePlanner()
     trajectory = planner.plan_trajectory(mission)
@@ -174,24 +175,24 @@ def run_security():
     security = DroneSecuritySuite()
     result = security.full_security_check(trajectory, score)
 
-    print("overall_status: " + result["overall_status"])
-    print("gps_spoofing: " + result["gps_spoofing"])
-    print("hijacking: " + result["hijacking"])
-    print("threat_level: " + result["threat_level"])
-    print("mission_cleared: " + str(result["mission_cleared"]))
+    logger.info("overall_status: " + result["overall_status"])
+    logger.info("gps_spoofing: " + result["gps_spoofing"])
+    logger.info("hijacking: " + result["hijacking"])
+    logger.info("threat_level: " + result["threat_level"])
+    logger.info("mission_cleared: " + str(result["mission_cleared"]))
 
     signer = CommandSigner()
     cmd = {"action": "fly", "destination": "47.3800,8.5450", "priority": 1}
     signed = signer.sign_command(cmd)
     verified = signer.verify_command(signed)
-    print("command_signed: True")
-    print("command_verified: " + str(verified))
-    print()
+    logger.info("command_signed: True")
+    logger.info("command_verified: " + str(verified))
+    logger.info("")
 
 def run_weather():
-    print("=" * 50)
-    print("WEATHER MODULE - ZURICH CONDITIONS")
-    print("=" * 50)
+    logger.info("=" * 50)
+    logger.info("WEATHER MODULE - ZURICH CONDITIONS")
+    logger.info("=" * 50)
     weather_service = WeatherService(city="zurich")
     weather = weather_service.get_current()
     mission = FakeMission()
@@ -199,38 +200,38 @@ def run_weather():
     trajectory = planner.plan_trajectory(mission)
     analyzer = WeatherImpactAnalyzer()
     impact = analyzer.analyze(weather, trajectory.positions)
-    print("flyable: " + str(impact["flyable"]))
-    print("severity: " + impact["severity"])
-    print("wind: " + str(impact["wind_speed_ms"]) + " m/s")
-    print("visibility: " + str(impact["visibility_m"]) + "m")
-    print("precipitation: " + impact["precipitation"])
-    print("speed_factor: " + str(impact["speed_factor"]))
-    print("energy_factor: " + str(impact["energy_factor"]))
-    print("recommendation: " + impact["recommendation"])
-    print()
+    logger.info("flyable: " + str(impact["flyable"]))
+    logger.info("severity: " + impact["severity"])
+    logger.info("wind: " + str(impact["wind_speed_ms"]) + " m/s")
+    logger.info("visibility: " + str(impact["visibility_m"]) + "m")
+    logger.info("precipitation: " + impact["precipitation"])
+    logger.info("speed_factor: " + str(impact["speed_factor"]))
+    logger.info("energy_factor: " + str(impact["energy_factor"]))
+    logger.info("recommendation: " + impact["recommendation"])
+    logger.info("")
 def run_energy():
-    print("=" * 50)
-    print("ENERGY OPTIMIZER")
-    print("=" * 50)
+    logger.info("=" * 50)
+    logger.info("ENERGY OPTIMIZER")
+    logger.info("=" * 50)
     mission = FakeMission()
     planner = DronePlanner()
     trajectory = planner.plan_trajectory(mission)
     battery = BatteryModel(capacity_wh=100.0, payload_kg=0.5)
     optimizer = EnergyOptimizer(battery=battery)
     result = optimizer.analyze_trajectory(trajectory.positions, wind_ms=3.0)
-    print("total_distance_km: " + str(result["total_distance_km"]))
-    print("battery_used_pct: " + str(result["battery_used_pct"]) + "%")
-    print("battery_remaining_pct: " + str(result["battery_remaining_pct"]) + "%")
-    print("efficiency_rating: " + result["efficiency_rating"])
-    print("mission_feasible: " + str(result["mission_feasible"]))
-    print("recommendation: " + result["recommendation"])
+    logger.info("total_distance_km: " + str(result["total_distance_km"]))
+    logger.info("battery_used_pct: " + str(result["battery_used_pct"]) + "%")
+    logger.info("battery_remaining_pct: " + str(result["battery_remaining_pct"]) + "%")
+    logger.info("efficiency_rating: " + result["efficiency_rating"])
+    logger.info("mission_feasible: " + str(result["mission_feasible"]))
+    logger.info("recommendation: " + result["recommendation"])
     optimal = optimizer.optimal_speed(wind_ms=3.0)
-    print("optimal_speed_ms: " + str(optimal))
-    print()
+    logger.info("optimal_speed_ms: " + str(optimal))
+    logger.info("")
 def run_history():
-    print("=" * 50)
-    print("MISSION HISTORY & STATISTICS")
-    print("=" * 50)
+    logger.info("=" * 50)
+    logger.info("MISSION HISTORY & STATISTICS")
+    logger.info("=" * 50)
     history = MissionHistory()
     for i in range(5):
         history.add(
@@ -242,38 +243,38 @@ def run_history():
             security="SECURE"
         )
     stats = history.stats()
-    print("total_missions: " + str(stats["total_missions"]))
-    print("avg_score: " + str(stats["avg_score"]))
-    print("max_score: " + str(stats["max_score"]))
-    print("success_rate: " + str(stats["success_rate_pct"]) + "%")
-    print()
-    print("last 3 missions:")
+    logger.info("total_missions: " + str(stats["total_missions"]))
+    logger.info("avg_score: " + str(stats["avg_score"]))
+    logger.info("max_score: " + str(stats["max_score"]))
+    logger.info("success_rate: " + str(stats["success_rate_pct"]) + "%")
+    logger.info("")
+    logger.info("last 3 missions:")
     for m in history.last(3):
-        print("  " + m["mission_id"] + " | score=" + str(m["score"]) +
+        logger.info("  " + m["mission_id"] + " | score=" + str(m["score"]) +
               " | battery=" + str(m["battery_used_pct"]) + "%")
-    print()
+    logger.info("")
 def run_obstacles():
-    print("=" * 50)
-    print("DYNAMIC OBSTACLES - URBAN AIRSPACE")
-    print("=" * 50)
+    logger.info("=" * 50)
+    logger.info("DYNAMIC OBSTACLES - URBAN AIRSPACE")
+    logger.info("=" * 50)
     mission = FakeMission()
     planner = DronePlanner()
     trajectory = planner.plan_trajectory(mission)
     manager = DynamicObstacleManager()
     result = manager.check_trajectory(trajectory.positions)
-    print("obstacles_tracked: " + str(result["obstacles_tracked"]))
-    print("conflicts_found: " + str(result["conflicts_found"]))
-    print("trajectory_safe: " + str(result["trajectory_safe"]))
-    print("recommendation: " + result["recommendation"])
+    logger.info("obstacles_tracked: " + str(result["obstacles_tracked"]))
+    logger.info("conflicts_found: " + str(result["conflicts_found"]))
+    logger.info("trajectory_safe: " + str(result["trajectory_safe"]))
+    logger.info("recommendation: " + result["recommendation"])
     if result["conflicts"]:
         for c in result["conflicts"]:
-            print("  conflict: " + c["obstacle_id"] +
+            logger.info("  conflict: " + c["obstacle_id"] +
                   " type=" + c["type"] +
                   " dist=" + str(c["distance_m"]) + "m")
 def run_threat_defense():
-    print("=" * 50)
-    print("THREAT DEFENSE - REAL ATTACK VECTORS")
-    print("=" * 50)
+    logger.info("=" * 50)
+    logger.info("THREAT DEFENSE - REAL ATTACK VECTORS")
+    logger.info("=" * 50)
     mission = FakeMission()
     planner = DronePlanner()
     trajectory = planner.plan_trajectory(mission)
@@ -282,28 +283,28 @@ def run_threat_defense():
         trajectory.positions,
         signal_strength=0.92
     )
-    print("overall_threat_level: " + result["overall_threat_level"])
-    print("gps_status: " + result["gps_status"])
-    print("jamming_status: " + result["jamming_status"])
-    print("swarm_integrity: " + result["swarm_integrity"])
-    print("mission_safe: " + str(result["mission_safe"]))
-    print("total_threats: " + str(result["total_threats"]))
+    logger.info("overall_threat_level: " + result["overall_threat_level"])
+    logger.info("gps_status: " + result["gps_status"])
+    logger.info("jamming_status: " + result["jamming_status"])
+    logger.info("swarm_integrity: " + result["swarm_integrity"])
+    logger.info("mission_safe: " + str(result["mission_safe"]))
+    logger.info("total_threats: " + str(result["total_threats"]))
     node = KonnexNode(
         wallet_address="0x5a4E...51f2",
         network="testnet"
     )
     node.connect()
     status = node.get_status()
-    print()
-    print("node_connected: " + str(status["connected"]))
-    print("network: " + status["network"])
-    print("session_id: " + str(status["session_id"]))
-    print()
-    print()
+    logger.info("")
+    logger.info("node_connected: " + str(status["connected"]))
+    logger.info("network: " + status["network"])
+    logger.info("session_id: " + str(status["session_id"]))
+    logger.info("")
+    logger.info("")
 def run_reputation():
-    print("=" * 50)
-    print("DRONE REPUTATION SCORE")
-    print("=" * 50)
+    logger.info("=" * 50)
+    logger.info("DRONE REPUTATION SCORE")
+    logger.info("=" * 50)
     rep = DroneReputation(drone_id="DRONE_001")
     missions = [
         ("DSYNC_001", 97, True, 7.0),
@@ -315,18 +316,18 @@ def run_reputation():
     for mission_id, score, safe, battery in missions:
         rep.record_mission(mission_id, score, safe, battery)
     status = rep.get_status()
-    print("drone_id: " + status["drone_id"])
-    print("reputation_score: " + str(status["score"]))
-    print("tier: " + status["tier"])
-    print("total_missions: " + str(status["missions_count"]))
-    print("on_chain_ready: " + str(status["on_chain_ready"]))
-    print()
+    logger.info("drone_id: " + status["drone_id"])
+    logger.info("reputation_score: " + str(status["score"]))
+    logger.info("tier: " + status["tier"])
+    logger.info("total_missions: " + str(status["missions_count"]))
+    logger.info("on_chain_ready: " + str(status["on_chain_ready"]))
+    logger.info("")
 
 
 def run_firewall():
-    print("=" * 50)
-    print("DRONE FIREWALL - COMMAND FILTER")
-    print("=" * 50)
+    logger.info("=" * 50)
+    logger.info("DRONE FIREWALL - COMMAND FILTER")
+    logger.info("=" * 50)
     fw = DroneFirewall(drone_id="DRONE_001")
     import time
     now = int(time.time())
@@ -339,40 +340,40 @@ def run_firewall():
     ]
     for cmd in commands:
         result = fw.filter(cmd)
-        print("action=" + cmd["action"] + " → " + result["status"] +
+        logger.info("action=" + cmd["action"] + " → " + result["status"] +
               (" | reason=" + result["reason"] if result["status"] == "BLOCKED" else ""))
     report = fw.get_report()
-    print("total_allowed: " + str(report["total_allowed"]))
-    print("total_blocked: " + str(report["total_blocked"]))
-    print("on_chain_ready: " + str(report["on_chain_ready"]))
-    print()
+    logger.info("total_allowed: " + str(report["total_allowed"]))
+    logger.info("total_blocked: " + str(report["total_blocked"]))
+    logger.info("on_chain_ready: " + str(report["on_chain_ready"]))
+    logger.info("")
 
 
 def run_last_will():
-    print("=" * 50)
-    print("DRONE LAST WILL - EMERGENCY PoPW")
-    print("=" * 50)
+    logger.info("=" * 50)
+    logger.info("DRONE LAST WILL - EMERGENCY PoPW")
+    logger.info("=" * 50)
     mission = FakeMission()
     planner = DronePlanner()
     trajectory = planner.plan_trajectory(mission)
     last_will = DroneLastWill(drone_id="DRONE_001")
     record = last_will.simulate_crash(trajectory.positions, mission.mission_id)
-    print("type: " + record["type"])
-    print("drone_id: " + record["drone_id"])
-    print("failure_cause: " + record["failure_cause"])
-    print("battery_pct: " + str(record["battery_pct"]) + "%")
-    print("last_position: lat=" + str(record["last_position"]["lat"]) +
+    logger.info("type: " + record["type"])
+    logger.info("drone_id: " + record["drone_id"])
+    logger.info("failure_cause: " + record["failure_cause"])
+    logger.info("battery_pct: " + str(record["battery_pct"]) + "%")
+    logger.info("last_position: lat=" + str(record["last_position"]["lat"]) +
           " lon=" + str(record["last_position"]["lon"]))
-    print("will_hash: " + record["will_hash"][:16] + "...")
-    print("insurance_claim_ready: " + str(record["insurance_claim_ready"]))
-    print("on_chain_ready: " + str(record["on_chain_ready"]))
-    print()
+    logger.info("will_hash: " + record["will_hash"][:16] + "...")
+    logger.info("insurance_claim_ready: " + str(record["insurance_claim_ready"]))
+    logger.info("on_chain_ready: " + str(record["on_chain_ready"]))
+    logger.info("")
 
 
 def run_memory():
-    print("=" * 50)
-    print("DRONE MEMORY - FLIGHT EXPERIENCE")
-    print("=" * 50)
+    logger.info("=" * 50)
+    logger.info("DRONE MEMORY - FLIGHT EXPERIENCE")
+    logger.info("=" * 50)
     mission = FakeMission()
     planner = DronePlanner()
     trajectory = planner.plan_trajectory(mission)
@@ -380,69 +381,69 @@ def run_memory():
     for i in range(5):
         mem.record_flight(trajectory.positions, duration_s=120.0, wind_ms=3.0)
     record = mem.get_memory_record()
-    print("drone_id: " + record["drone_id"])
-    print("missions_completed: " + str(record["missions_completed"]))
-    print("total_flight_hours: " + str(record["total_flight_hours"]))
-    print("asset_value: " + record["asset_value"])
-    print("on_chain_ready: " + str(record["on_chain_ready"]))
-    print()
+    logger.info("drone_id: " + record["drone_id"])
+    logger.info("missions_completed: " + str(record["missions_completed"]))
+    logger.info("total_flight_hours: " + str(record["total_flight_hours"]))
+    logger.info("asset_value: " + record["asset_value"])
+    logger.info("on_chain_ready: " + str(record["on_chain_ready"]))
+    logger.info("")
 
 
 def run_swarm_consensus():
-    print("=" * 50)
-    print("SWARM CONSENSUS - DECENTRALIZED VOTING")
-    print("=" * 50)
+    logger.info("=" * 50)
+    logger.info("SWARM CONSENSUS - DECENTRALIZED VOTING")
+    logger.info("=" * 50)
     drones = ["drone_0", "drone_1", "drone_2", "drone_3", "drone_4"]
     consensus = SwarmConsensus(drone_ids=drones)
     votes = [(d, True) for d in drones[:4]] + [("drone_4", False)]
     result = consensus.vote_on_route("DSYNC_001", votes)
-    print("mission_id: DSYNC_001")
-    print("approval_weight: " + str(result["approval_weight"]) + "/" + str(result["total_weight"]))    
-    print("approval_rate: " + str(result["approval_rate"]))
-    print("route_status: " + result["status"])
+    logger.info("mission_id: DSYNC_001")
+    logger.info("approval_weight: " + str(result["approval_weight"]) + "/" + str(result["total_weight"]))    
+    logger.info("approval_rate: " + str(result["approval_rate"]))
+    logger.info("route_status: " + result["status"])
     bl_votes = [(d, True) for d in ["drone_0", "drone_1", "drone_2"]] + [("drone_3", False)]
     bl_result = consensus.vote_blacklist("drone_4", bl_votes)
-    print("blacklist_vote: drone_4 -> " + bl_result["status"])
+    logger.info("blacklist_vote: drone_4 -> " + bl_result["status"])
     status = consensus.get_swarm_status()
-    print("active_drones: " + str(status["active_drones"]) + "/" + str(status["total_drones"]))
-    print("on_chain_ready: " + str(status["on_chain_ready"]))
-    print()
+    logger.info("active_drones: " + str(status["active_drones"]) + "/" + str(status["total_drones"]))
+    logger.info("on_chain_ready: " + str(status["on_chain_ready"]))
+    logger.info("")
 
 
 def run_emergency():
-    print("=" * 50)
-    print("EMERGENCY OVERRIDE PROTOCOL")
-    print("=" * 50)
+    logger.info("=" * 50)
+    logger.info("EMERGENCY OVERRIDE PROTOCOL")
+    logger.info("=" * 50)
     override = EmergencyOverride()
     emergency = override.broadcast_emergency(
         emergency_type="FIRE",
         location={"lat": 47.3780, "lon": 8.5430},
         authority_id="ZURICH_FIRE_DEPT_001"
     )
-    print("emergency_id: " + emergency["emergency_id"])
-    print("type: " + emergency["type"] + " | needs: " + str(emergency["needs"]))
+    logger.info("emergency_id: " + emergency["emergency_id"])
+    logger.info("type: " + emergency["type"] + " | needs: " + str(emergency["needs"]))
     drone_pos = [47.3782, 8.5432, 50.0]
     # cargo дрон — перехватывается пожаром
     c1 = override.check_drone_override(drone_pos, emergency, mission_type="urban_delivery")
-    print("urban_delivery (cargo): override=" + str(c1["override"]) + " -> " + c1.get("action", c1.get("reason", "")))
+    logger.info("urban_delivery (cargo): override=" + str(c1["override"]) + " -> " + c1.get("action", c1.get("reason", "")))
     # medical дрон — пожарной службе не нужен
     c2 = override.check_drone_override(drone_pos, emergency, mission_type="organ_delivery")
-    print("organ_delivery (medical): override=" + str(c2["override"]) + " -> " + c2.get("reason", "") + " | " + c2.get("note", ""))
+    logger.info("organ_delivery (medical): override=" + str(c2["override"]) + " -> " + c2.get("reason", "") + " | " + c2.get("note", ""))
     # medical emergency — нужен именно medical дрон
     med_em = override.broadcast_emergency("MEDICAL_EMERGENCY", {"lat": 47.3780, "lon": 8.5430}, "ZURICH_HOSPITAL_001")
     c3 = override.check_drone_override(drone_pos, med_em, mission_type="organ_delivery")
-    print("organ_delivery vs MEDICAL_EMERGENCY: override=" + str(c3["override"]) + " -> " + c3.get("action", c3.get("reason", "")))
+    logger.info("organ_delivery vs MEDICAL_EMERGENCY: override=" + str(c3["override"]) + " -> " + c3.get("action", c3.get("reason", "")))
     status = override.get_status()
-    print("redirected_drones: " + str(status["redirected_drones"]))
-    print("protected_drones: " + str(status["protected_drones"]))
-    print("on_chain_ready: " + str(status["on_chain_ready"]))
-    print()
+    logger.info("redirected_drones: " + str(status["redirected_drones"]))
+    logger.info("protected_drones: " + str(status["protected_drones"]))
+    logger.info("on_chain_ready: " + str(status["on_chain_ready"]))
+    logger.info("")
 
 
 def run_storage():
-    print("=" * 50)
-    print("PERSISTENT STORAGE - DRONE STATE")
-    print("=" * 50)
+    logger.info("=" * 50)
+    logger.info("PERSISTENT STORAGE - DRONE STATE")
+    logger.info("=" * 50)
     storage = DroneStorage(drone_id="DRONE_001")
     storage.clear()
     for i in range(3):
@@ -455,19 +456,19 @@ def run_storage():
     storage.update_reputation(score=72, tier="TRUSTED")
     missions = storage.get_missions()
     rep = storage.get_reputation()
-    print("drone_id: DRONE_001")
-    print("missions_saved: " + str(len(missions)))
-    print("last_mission: " + missions[-1]["mission_id"] + " | score=" + str(missions[-1]["score"]))
-    print("reputation_score: " + str(rep["score"]) + " | tier: " + rep["tier"])
-    print("persisted_to_disk: True")
-    print("survives_restart: True")
-    print()
+    logger.info("drone_id: DRONE_001")
+    logger.info("missions_saved: " + str(len(missions)))
+    logger.info("last_mission: " + missions[-1]["mission_id"] + " | score=" + str(missions[-1]["score"]))
+    logger.info("reputation_score: " + str(rep["score"]) + " | tier: " + rep["tier"])
+    logger.info("persisted_to_disk: True")
+    logger.info("survives_restart: True")
+    logger.info("")
 
 
 def run_sensor_bundle():
-    print("=" * 50)
-    print("SENSOR BUNDLE - EVIDENCE PACKAGE")
-    print("=" * 50)
+    logger.info("=" * 50)
+    logger.info("SENSOR BUNDLE - EVIDENCE PACKAGE")
+    logger.info("=" * 50)
     mission = FakeMission()
     planner = DronePlanner()
     trajectory = planner.plan_trajectory(mission)
@@ -482,19 +483,19 @@ def run_sensor_bundle():
         popw_record=record
     )
     verify = SensorBundle().verify(bundle)
-    print("mission_id: " + bundle["mission_id"])
-    print("sensor_hash: " + bundle["sensor_hash"][:16] + "...")
-    print("bundle_hash: " + bundle["bundle_hash"][:16] + "...")
-    print("tee_status: " + bundle["popw"]["tee_status"])
-    print("bundle_valid: " + str(verify["valid"]))
-    print("on_chain_ready: " + str(bundle["on_chain_ready"]))
-    print()
+    logger.info("mission_id: " + bundle["mission_id"])
+    logger.info("sensor_hash: " + bundle["sensor_hash"][:16] + "...")
+    logger.info("bundle_hash: " + bundle["bundle_hash"][:16] + "...")
+    logger.info("tee_status: " + bundle["popw"]["tee_status"])
+    logger.info("bundle_valid: " + str(verify["valid"]))
+    logger.info("on_chain_ready: " + str(bundle["on_chain_ready"]))
+    logger.info("")
 
 
 def run_scoreroot():
-    print("=" * 50)
-    print("SCORE ROOT - VALIDATOR COMMITMENT")
-    print("=" * 50)
+    logger.info("=" * 50)
+    logger.info("SCORE ROOT - VALIDATOR COMMITMENT")
+    logger.info("=" * 50)
     sr = ScoreRoot(validator_id="VALIDATOR_001")
     missions = [
         ("DSYNC_001", 97, "abc123", "def456"),
@@ -504,18 +505,18 @@ def run_scoreroot():
     for mid, score, th, sh in missions:
         sr.add_score(mid, score, th, sh)
     commitment = sr.commit()
-    print("validator_id: " + sr.validator_id)
-    print("scores_count: " + str(commitment["scores_count"]))
-    print("score_root: " + commitment["score_root"][:16] + "...")
-    print("on_chain_ready: " + str(commitment["on_chain_ready"]))
+    logger.info("validator_id: " + sr.validator_id)
+    logger.info("scores_count: " + str(commitment["scores_count"]))
+    logger.info("score_root: " + commitment["score_root"][:16] + "...")
+    logger.info("on_chain_ready: " + str(commitment["on_chain_ready"]))
     verify = sr.verify_score("DSYNC_002")
-    print("verify DSYNC_002: " + str(verify["verified"]) +
+    logger.info("verify DSYNC_002: " + str(verify["verified"]) +
           " | score=" + str(verify["score"]))
-    print()
+    logger.info("")
 
 
 def run_demo():
-    print("\nDroneSync MVP starting...\n")
+    logger.info("\nDroneSync MVP starting...\n")
     run_threat_defense()
     run_single_drone()
     run_swarm()
@@ -537,9 +538,15 @@ def run_demo():
     run_scoreroot()
     run_sensor_bundle()
     demo_synapse()
-    print("DroneSync pipeline completed successfully")
-    print("PoPW artifact ready for on-chain submission")
+    logger.info("DroneSync pipeline completed successfully")
+    logger.info("PoPW artifact ready for on-chain submission")
 
 
 if __name__ == "__main__":
-    run_demo()
+    try:
+        run_demo()
+    except KeyboardInterrupt:
+        logger.info("DroneSync interrupted by user")
+    except Exception as e:
+        logger.error("DroneSync fatal error: %s", e)
+        raise

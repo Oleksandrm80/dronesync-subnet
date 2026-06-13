@@ -1,2 +1,2 @@
-from environment.sim import DroneEnvironment, SwarmEnvironment
-from environment.obstacles import DynamicObstacleManager, MovingObstacle
+from environment.sim import DroneEnvironment as DroneEnvironment, SwarmEnvironment as SwarmEnvironment
+from environment.obstacles import DynamicObstacleManager as DynamicObstacleManager, MovingObstacle as MovingObstacle

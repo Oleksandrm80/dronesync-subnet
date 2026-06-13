@@ -112,7 +112,7 @@ class SwarmEnvironment:
             padded.append(positions)
 
         # Predict collisions across all time steps
-        all_conflicts = {drone_id: [] for drone_id in drone_ids}
+        all_conflicts: dict = {drone_id: [] for drone_id in drone_ids}
         for step in range(max_steps):
             step_positions = [(drone_ids[i], padded[i][step])
                               for i in range(len(drone_ids))]
@@ -236,7 +236,7 @@ class SwarmEnvironment:
                     random.uniform(-0.02, 0.02)
                 ]
             },
-            timestamp=pos[3] if len(pos) > 3 else 0.0
+            timestamp=int(pos[3]) if len(pos) > 3 else 0
         )
 
     def _haversine(self, lat1: float, lon1: float,

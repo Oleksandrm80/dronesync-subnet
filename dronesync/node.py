@@ -2,9 +2,9 @@
 DroneSync - Node Connection Module
 Handles Konnex network connection with auto-reconnect
 """
+from typing import Optional
 import time
 import hashlib
-import json
 
 
 class KonnexNode:
@@ -24,7 +24,7 @@ class KonnexNode:
         self.network = network
         self.connected = False
         self.retry_count = 0
-        self.session_id = None
+        self.session_id: Optional[str] = None
 
     def connect(self) -> bool:
         """Connect to Konnex node with auto-retry."""
@@ -36,7 +36,7 @@ class KonnexNode:
                 self.connected = True
                 self.retry_count = 0
                 return True
-            except Exception as e:
+            except Exception:
                 self.retry_count += 1
                 if attempt < self.MAX_RETRIES - 1:
                     time.sleep(self.RETRY_DELAY)
@@ -44,7 +44,7 @@ class KonnexNode:
 
     def disconnect(self):
         self.connected = False
-        self.session_id = None
+        self.session_id: Optional[str] = None
 
     def is_healthy(self) -> bool:
         return self.connected and self.session_id is not None

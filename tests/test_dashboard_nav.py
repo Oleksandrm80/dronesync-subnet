@@ -86,7 +86,8 @@ def test_alert_levels_defined():
 
 
 def test_dashboard_render_has_nav_panel():
-    import sys, os
+    import sys
+    import os
     sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
     from dashboard.app import HTML_TEMPLATE
     assert "{nav_alerts}" in HTML_TEMPLATE

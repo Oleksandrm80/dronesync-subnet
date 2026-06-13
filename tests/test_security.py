@@ -1,8 +1,7 @@
 """Tests for security, threat defense, and command signing."""
 import time
-import pytest
 from dronesync.security import (
-    GPSSpoofingDetector, CommandSigner, AnomalyDetector, DroneSecuritySuite
+    GPSSpoofingDetector, CommandSigner, DroneSecuritySuite
 )
 from dronesync.threat_defense import ThreatDefense
 
