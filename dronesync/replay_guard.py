@@ -21,11 +21,17 @@ class ReplayGuard:
         import json
         self._persist_path = persist_path
         os.makedirs(os.path.dirname(persist_path), exist_ok=True)
-        if os.path.exists(persist_path):
-            with open(persist_path) as f:
-                self._seen = json.load(f)
-        else:
-            self._seen = {}
+        self._seen = {}
+        log_path = persist_path + ".log"
+        if os.path.exists(log_path):
+            import json as _json
+            with open(log_path) as f:
+                for line in f:
+                    try:
+                        entry = _json.loads(line.strip())
+                        self._seen[entry["id"]] = entry["ts"]
+                    except Exception:
+                        pass
     def check(self, mission_id: str, created_at: float) -> dict:
         """
         Check if mission is safe to process.
@@ -35,6 +41,8 @@ class ReplayGuard:
 
         # Check age
         age = now - created_at
+        if created_at > now + 300:
+            return {"allowed": False, "reason": "TIMESTAMP_FROM_FUTURE", "mission_id": mission_id}
         if age > self.MAX_AGE_SECONDS:
             return {
                 "allowed": False,
@@ -65,9 +73,10 @@ class ReplayGuard:
     def register(self, mission_id: str):
         """Manually register a mission_id as seen."""
         import json
-        self._seen[mission_id] = time.time()
-        with open(self._persist_path, "w") as f:
-            json.dump(self._seen, f)
+        now = time.time()
+        self._seen[mission_id] = now
+        with open(self._persist_path + ".log", "a") as f:
+            f.write(json.dumps({"id": mission_id, "ts": now}) + "\n")
     def is_seen(self, mission_id: str) -> bool:
         return mission_id in self._seen
 
