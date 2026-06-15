@@ -13,7 +13,7 @@ TIER_WEIGHTS = {
     "ROOKIE":  1,
 }
 
-QUORUM = 0.51
+QUORUM = 0.67
 
 
 class SwarmConsensus:

@@ -38,8 +38,8 @@ def test_memory_asset_value_high():
 # --- Swarm Consensus ---
 
 def test_consensus_approves_majority_vote():
-    c = SwarmConsensus(["d0", "d1", "d2"])
-    votes = [("d0", True), ("d1", True), ("d2", False)]
+    c = SwarmConsensus(["d0", "d1", "d2", "d3"])
+    votes = [("d0", True), ("d1", True), ("d2", True), ("d3", False)]
     result = c.vote_on_route("M1", votes)
     assert result["status"] == "APPROVED"
 

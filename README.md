@@ -14,20 +14,16 @@
 ---
 
 ## What is DroneSync?
+**DroneSync is a trust, validation and proof framework for autonomous drone missions.**
 
-DroneSync is a Konnex subnet for coordinating autonomous drone swarms
-in complex urban environments. Unlike simple navigation systems,
-DroneSync handles the full production cycle:
+Every mission produces a cryptographic Proof of Physical Work (PoPW) —
+verified by TEE attestation, approved by Byzantine-aware swarm consensus,
+and stored in an immutable on-chain history.
 
-- Multi-drone swarm coordination with real-time collision avoidance
-- AI-powered trajectory planning that learns from validator feedback
-- Real urban airspace data (Zurich, Berlin, Kyiv) with no-fly zones
-- Hardware-grade TEE attestation for tamper-proof PoPW records
-- GPS spoofing detection and command signing against cyber attacks
-- Weather impact analysis for safe flight decisions
-- Battery optimization for maximum mission efficiency
-- Dynamic obstacle tracking (drones, birds, helicopters)
-- Full mission history and performance statistics
+Core chain:
+```
+Mission → Planner → Validator → Score → PoPW → Consensus → History → Trust
+```
 
 ---
 
@@ -85,6 +81,7 @@ git clone https://github.com/Oleksandrm80/dronesync-subnet.git
 cd dronesync-subnet
 pip install -r requirements.txt
 python main.py
+python3 demo_chain.py  # Full trust chain demo
 ```
 
 ---

@@ -35,8 +35,14 @@ class DroneStorage:
         """Load drone state from disk. Returns empty dict if no data yet."""
         if not os.path.exists(self.path):
             return {}
-        with open(self.path, "r", encoding="utf-8") as f:
-            data = json.load(f)
+        try:
+            with open(self.path, "r", encoding="utf-8") as f:
+                data = json.load(f)
+        except json.JSONDecodeError:
+            import logging
+            logging.getLogger(__name__).warning("Storage corrupted: %s — resetting", self.path)
+            os.rename(self.path, self.path + ".corrupted")
+            return {}
         stored_hash = data.pop("_integrity", None)
         if stored_hash:
             check = json.dumps(data, sort_keys=True, indent=2)

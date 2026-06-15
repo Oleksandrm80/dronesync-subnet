@@ -129,6 +129,14 @@ class DroneNavSynapseHandler:
         """
         if not isinstance(synapse_task, dict):
             return {"status": "REJECTED", "reason": "invalid_input_type", "on_chain_ready": False}
+        if not synapse_task:
+            return {"status": "REJECTED", "reason": "empty_task", "on_chain_ready": False}
+        waypoints = synapse_task.get("waypoints", [])
+        for wp in waypoints:
+            if len(wp) >= 2:
+                lat, lon = float(wp[0]), float(wp[1])
+                if not (-90 <= lat <= 90) or not (-180 <= lon <= 180):
+                    return {"status": "REJECTED", "reason": "invalid_gps_coordinates", "on_chain_ready": False}
 
         try:
             t_start = time.time()
