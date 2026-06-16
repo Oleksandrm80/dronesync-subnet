@@ -80,6 +80,19 @@ class ReplayGuard:
     def is_seen(self, mission_id: str) -> bool:
         return mission_id in self._seen
 
+    def cleanup_expired(self, ttl_seconds: int = 86400) -> int:
+        """Remove mission IDs older than ttl_seconds (default 24h)."""
+        import json
+        now = time.time()
+        before = len(self._seen)
+        self._seen = {k: v for k, v in self._seen.items() if now - v < ttl_seconds}
+        removed = before - len(self._seen)
+        if removed > 0:
+            with open(self._persist_path + ".log", "w") as f:
+                for mid, ts in self._seen.items():
+                    f.write(json.dumps({"id": mid, "ts": ts}) + "\n")
+        return removed
+
     def get_status(self) -> dict:
         seen_list = list(self._seen.keys())
         status_hash = hashlib.sha256(str(seen_list).encode()).hexdigest()
