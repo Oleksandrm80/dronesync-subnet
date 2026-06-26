@@ -245,7 +245,26 @@ class AIPlanner:
         """Optimize speed based on efficiency weight."""
         return round(base_speed * (1 + self.learned_weights["efficiency"] * 0.2), 2)
 
+    def apply_federated_weights(self, global_weights: dict):
+        """Apply weights from federated learning aggregator."""
+        if "safety" in global_weights:
+            self.learned_weights["safety"] = global_weights["safety"]
+        if "efficiency" in global_weights:
+            self.learned_weights["efficiency"] = global_weights["efficiency"]
+        if "energy" in global_weights:
+            self.learned_weights["energy"] = global_weights["energy"]
 
+    def to_flight_record(self, score: float) -> dict:
+        """Export flight record for federated learning."""
+        return {
+            "score": score / 100.0,
+            "avg_speed": self.learned_weights["efficiency"],
+            "avg_altitude": self.learned_weights["safety"],
+            "battery_efficiency": self.learned_weights["energy"],
+            "obstacle_avoidance_rate": self.learned_weights["safety"],
+            "path_deviation": 1.0 - self.learned_weights["efficiency"],
+            "weather_impact": 0.5,
+        }
 if __name__ == "__main__":
     planner = DronePlanner()
     # Здесь можно будет протестировать

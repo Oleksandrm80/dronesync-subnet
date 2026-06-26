@@ -1,48 +1,43 @@
 """
 DroneSync - Replay Attack Protection
 Prevents resubmission of already processed missions.
-Stores seen mission_ids with timestamps.
+Uses SQLite for thread-safe, crash-resistant storage.
 """
 import hashlib
 import time
+import threading
+import sqlite3
+import os
 
 
 class ReplayGuard:
-    """
-    Protects against replay attacks — resubmitting old missions.
-    Each mission_id can only be processed once.
-    Nonce + timestamp validation prevents time-shifted replays.
-    """
-
-    MAX_AGE_SECONDS = 3600  # mission older than 1 hour is rejected
+    MAX_AGE_SECONDS = 3600
 
     def __init__(self, persist_path: str = ".dronesync_data/replay_guard.json"):
-        import os
-        import json
-        self._persist_path = persist_path
-        os.makedirs(os.path.dirname(persist_path), exist_ok=True)
-        self._seen = {}
-        log_path = persist_path + ".log"
-        if os.path.exists(log_path):
-            import json as _json
-            with open(log_path) as f:
-                for line in f:
-                    try:
-                        entry = _json.loads(line.strip())
-                        self._seen[entry["id"]] = entry["ts"]
-                    except Exception:
-                        pass
+        db_path = persist_path if persist_path.endswith(".db") else persist_path.replace(".json", ".db") if persist_path.endswith(".json") else persist_path + ".db"
+        os.makedirs(os.path.dirname(db_path), exist_ok=True)
+        self._lock = threading.Lock()
+        self._db = sqlite3.connect(db_path, check_same_thread=False)
+        self._db.execute("PRAGMA journal_mode=WAL")
+        self._db.execute("""
+            CREATE TABLE IF NOT EXISTS seen_missions (
+                mission_id TEXT PRIMARY KEY,
+                first_seen_at REAL
+            )
+        """)
+        self._db.commit()
+
     def check(self, mission_id: str, created_at: float) -> dict:
-        """
-        Check if mission is safe to process.
-        Returns dict with allowed=True/False and reason.
-        """
         now = time.time()
 
-        # Check age
+        if created_at > now + 60:
+            return {
+                "allowed": False,
+                "reason": "FUTURE_TIMESTAMP",
+                "mission_id": mission_id
+            }
+
         age = now - created_at
-        if created_at > now + 300:
-            return {"allowed": False, "reason": "TIMESTAMP_FROM_FUTURE", "mission_id": mission_id}
         if age > self.MAX_AGE_SECONDS:
             return {
                 "allowed": False,
@@ -51,18 +46,26 @@ class ReplayGuard:
                 "mission_id": mission_id
             }
 
-        # Check replay
-        if mission_id in self._seen:
-            first_seen = self._seen[mission_id]
-            return {
-                "allowed": False,
-                "reason": "REPLAY_DETECTED",
-                "first_seen_at": first_seen,
-                "mission_id": mission_id
-            }
+        with self._lock:
+            row = self._db.execute(
+                "SELECT first_seen_at FROM seen_missions WHERE mission_id=?",
+                (mission_id,)
+            ).fetchone()
 
-        # All good — register
-        self._seen[mission_id] = now
+            if row:
+                return {
+                    "allowed": False,
+                    "reason": "REPLAY_DETECTED",
+                    "first_seen_at": row[0],
+                    "mission_id": mission_id
+                }
+
+            self._db.execute(
+                "INSERT INTO seen_missions VALUES (?, ?)",
+                (mission_id, now)
+            )
+            self._db.commit()
+
         return {
             "allowed": True,
             "reason": "OK",
@@ -71,33 +74,28 @@ class ReplayGuard:
         }
 
     def register(self, mission_id: str):
-        """Manually register a mission_id as seen."""
-        import json
-        now = time.time()
-        self._seen[mission_id] = now
-        with open(self._persist_path + ".log", "a") as f:
-            f.write(json.dumps({"id": mission_id, "ts": now}) + "\n")
-    def is_seen(self, mission_id: str) -> bool:
-        return mission_id in self._seen
+        with self._lock:
+            self._db.execute(
+                "INSERT OR REPLACE INTO seen_missions VALUES (?, ?)",
+                (mission_id, time.time())
+            )
+            self._db.commit()
 
-    def cleanup_expired(self, ttl_seconds: int = 86400) -> int:
-        """Remove mission IDs older than ttl_seconds (default 24h)."""
-        import json
-        now = time.time()
-        before = len(self._seen)
-        self._seen = {k: v for k, v in self._seen.items() if now - v < ttl_seconds}
-        removed = before - len(self._seen)
-        if removed > 0:
-            with open(self._persist_path + ".log", "w") as f:
-                for mid, ts in self._seen.items():
-                    f.write(json.dumps({"id": mid, "ts": ts}) + "\n")
-        return removed
+    def is_seen(self, mission_id: str) -> bool:
+        with self._lock:
+            row = self._db.execute(
+                "SELECT 1 FROM seen_missions WHERE mission_id=?",
+                (mission_id,)
+            ).fetchone()
+            return row is not None
 
     def get_status(self) -> dict:
-        seen_list = list(self._seen.keys())
+        with self._lock:
+            rows = self._db.execute("SELECT mission_id FROM seen_missions").fetchall()
+            seen_list = [r[0] for r in rows]
         status_hash = hashlib.sha256(str(seen_list).encode()).hexdigest()
         return {
-            "total_seen": len(self._seen),
+            "total_seen": len(seen_list),
             "seen_missions": seen_list,
             "status_hash": status_hash,
             "on_chain_ready": True

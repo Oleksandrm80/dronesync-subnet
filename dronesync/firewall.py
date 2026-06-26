@@ -1,78 +1,61 @@
 """
 DroneSync - Drone Firewall
-Filters all incoming commands. Blocks anomalies and logs attempts in PoPW.
 """
-from typing import Optional
 import time
 import hashlib
 import hmac
 import json
+import os
+
 
 class DroneFirewall:
-    """
-    Command firewall for drone nodes.
-    Every incoming command is validated before execution.
-    Blocked attempts are logged and included in PoPW record.
-    """
-
     MAX_COMMANDS_PER_MINUTE = 20
     ALLOWED_ACTIONS = {"fly", "hover", "land", "return_home", "scan", "deliver", "execute_task"}
 
-    def __init__(self, drone_id: str, secret_key: Optional[str] = None):
+    def __init__(self, drone_id: str, secret_key: str = None):
         self.drone_id = drone_id
-        self.blocked_log: list = []
-        self.allowed_log: list = []
-        self._command_times: list = []
-        self.trusted_sources: set = set()
-        import os
+        self.blocked_log = []
+        self.allowed_log = []
+        self._command_times = []
+        self.trusted_sources = set()
         self._secret = (secret_key or os.urandom(32).hex()).encode()
         self._admin_token = os.urandom(16).hex()
 
-    def add_trusted_source(self, source_id: str, admin_token: Optional[str] = None) -> dict:
-        """Add a trusted source. Requires admin_token to prevent unauthorized bypass."""
+    def add_trusted_source(self, source_id: str, admin_token: str = None) -> dict:
         if not admin_token or admin_token != self._admin_token:
             return {"status": "DENIED", "reason": "invalid_admin_token"}
         self.trusted_sources.add(source_id)
         return {"status": "ADDED", "source_id": source_id}
 
     def filter(self, command: dict) -> dict:
-        """
-        Filter incoming command.
-        Returns result with status ALLOWED or BLOCKED + reason.
-        """
         action = command.get("action", "")
         source = command.get("source", "unknown")
         timestamp = command.get("timestamp", 0)
 
-        # Trusted sources bypass all checks
         if source in self.trusted_sources:
             entry = {"action": action, "source": source, "timestamp": int(time.time()), "status": "ALLOWED"}
             self.allowed_log.append(entry)
             return {"status": "ALLOWED", "action": action}
 
-        # Check 1: unknown action
         if action not in self.ALLOWED_ACTIONS:
             return self._block(command, "unknown_action")
 
-        # Check 2: missing signature
-        # Check 2: signature must exist and be cryptographically valid
-        if "signature" not in command:
+        if not command.get("signature"):
             return self._block(command, "missing_signature")
+
         cmd_copy = {k: v for k, v in command.items() if k != "signature"}
         expected_sig = hmac.new(
             self._secret,
             json.dumps(cmd_copy, sort_keys=True).encode(),
             hashlib.sha256
         ).hexdigest()
-        sig = command.get("signature")
-        if not isinstance(sig, str) or not hmac.compare_digest(sig, expected_sig):
+        if not hmac.compare_digest(command["signature"], expected_sig):
             return self._block(command, "invalid_signature")
-        # Check 3: stale command (older than 30 seconds)
+
         now = int(time.time())
         if timestamp and (now - timestamp) > 30:
             return self._block(command, "stale_command")
 
-        # Check 4: rate limit
         self._command_times = [t for t in self._command_times if now - t < 60]
         if len(self._command_times) >= self.MAX_COMMANDS_PER_MINUTE:
             return self._block(command, "rate_limit_exceeded")
@@ -81,6 +64,9 @@ class DroneFirewall:
         entry = {"action": action, "source": source, "timestamp": now, "status": "ALLOWED"}
         self.allowed_log.append(entry)
         return {"status": "ALLOWED", "action": action}
+
+    def filter_command(self, command: dict) -> dict:
+        return self.filter(command)
 
     def _block(self, command: dict, reason: str) -> dict:
         entry = {
@@ -93,7 +79,6 @@ class DroneFirewall:
         return {"status": "BLOCKED", "reason": reason}
 
     def get_report(self) -> dict:
-        """Return firewall report for PoPW inclusion."""
         log_hash = hashlib.sha256(str(self.blocked_log).encode()).hexdigest()
         return {
             "drone_id": self.drone_id,

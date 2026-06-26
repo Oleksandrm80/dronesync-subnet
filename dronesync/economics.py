@@ -80,7 +80,7 @@ class RewardCalculator:
 
         score_mult = self._score_multiplier(total_score)
         tier_mult = TIER_MULTIPLIERS.get(reputation_tier.upper(), 1.0)
-        penalty = min(MAX_PENALTY, safety_violations * PENALTY_PER_VIOLATION)
+        penalty = min(MAX_PENALTY, max(0, safety_violations) * PENALTY_PER_VIOLATION)
 
         if grade in ("EXCELLENT", "GOOD"):
             self._streak += 1

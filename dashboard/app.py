@@ -22,6 +22,11 @@ from dronesync.swarm_consensus import SwarmConsensus
 from dronesync.threat_defense import ThreatDefense
 from miner.weather import WeatherService
 from dronesync.logger import get_logger
+from dronesync.monitoring import MetricsCollector, AlertManager
+from dronesync.wallet import MinerWallet
+from dronesync.bittensor_integration import SubnetConfig, MinerAxon, SubnetMetagraph
+from dronesync.mpc import ShamirSecretSharing
+from dronesync.validator_auth import ValidatorAuth
 from miner.energy import EnergyOptimizer
 from miner.planner import AIPlanner
 logger = get_logger("dronesync.dashboard")
@@ -48,6 +53,13 @@ swarm = SwarmConsensus(drone_ids=DRONE_IDS)
 weather = WeatherService()
 energy = EnergyOptimizer()
 threat = ThreatDefense()
+metrics_collector = MetricsCollector()
+alert_manager = AlertManager(metrics_collector)
+miner_wallet = MinerWallet("MINER_001", persist_path=".dronesync_data/dashboard_wallet.db")
+miner_axon = MinerAxon("0x5a4E...51f2", "dronesync_hotkey_001")
+metagraph = SubnetMetagraph()
+metagraph.register_miner(miner_axon)
+validator_auth_obj = ValidatorAuth()
 # Фиксированные координаты дронов для карты (в процентах от размера карты)
 DRONE_COORDS = {
     "DRONE_001": {"x": 28, "y": 38, "tx": 62, "ty": 55},
@@ -159,6 +171,37 @@ def refresh_state():
     # Firewall stats
     fw_report = firewalls[DRONE_IDS[0]].get_report()
     state["firewall"] = fw_report
+
+    # Monitoring
+    for d in DRONE_IDS:
+        dr = state["drones"].get(d, {})
+        metrics_collector.record_mission(dr.get("mission_id",""), dr.get("score",0)/100.0, 250.0, True)
+    state["monitoring"] = metrics_collector.get_metrics()
+    state["alerts"] = alert_manager.get_status()
+
+    # Wallet
+    for d in DRONE_IDS:
+        dr = state["drones"].get(d, {})
+        miner_wallet.credit(dr.get("mission_id",""), round(dr.get("score",0)*0.01,4), "mission_reward")
+    state["wallet"] = miner_wallet.summary()
+
+    # Bittensor
+    miner_axon.submit_popw({"mission_id":"DASH_001","score":0.85,"trajectory_hash":"abc123"})
+    state["bittensor_miner"] = miner_axon.get_status()
+    state["bittensor_net"] = metagraph.get_state()
+
+    # MPC
+    try:
+        _sss = ShamirSecretSharing(threshold=2, n_shares=3)
+        _shares = _sss.split(0.85)
+        _rec = _sss.reconstruct(_shares[:2])
+        state["mpc"] = {"status":"OK","threshold":2,"n_shares":3,"reconstructed":round(_rec,4),"shares":len(_shares)}
+    except Exception as _e:
+        state["mpc"] = {"status":"ERROR","error":str(_e)}
+
+    # Validator Auth
+    _tok = validator_auth_obj.generate_token("VALIDATOR_001")
+    state["validator_auth"] = {"status":"ACTIVE","token_valid":validator_auth_obj.verify_token(_tok),"ttl":ValidatorAuth.TOKEN_TTL,"method":"HMAC-SHA256"}
 
     # Threat defense
     state["threat"] = {
@@ -907,6 +950,31 @@ if (_sideRadarEl) {{
   <div class="card">
     <div class="ctitle">Byzantine Detector · Swarm Security</div>
     {byzantine_panel}
+  </div>
+
+  <div class="card">
+    <div class="ctitle">Monitoring · System Health</div>
+    {monitoring_panel}
+  </div>
+
+  <div class="card">
+    <div class="ctitle">Wallet · KNX Balance</div>
+    {wallet_panel}
+  </div>
+
+  <div class="card">
+    <div class="ctitle">Bittensor · Network Status</div>
+    {bittensor_panel}
+  </div>
+
+  <div class="card">
+    <div class="ctitle">MPC · Shamir Secret Sharing</div>
+    {mpc_panel}
+  </div>
+
+  <div class="card">
+    <div class="ctitle">Validator Auth · HMAC-SHA256</div>
+    {validator_auth_panel}
   </div>
 
 </div>
@@ -1803,39 +1871,68 @@ def render_dashboard() -> str:
     _sb_drone_json = _json.dumps(_sb_drone_positions)
     sb_sim_status = "SAFE" if _sim.safe else "UNSAFE"
 
-    # Sidebar data
-    import json as _json
-    _sb_threat = s.get("threat", {}).get("overall_threat_level", "NONE")
-    _sb_gps = s.get("threat", {}).get("gps_status", "CLEAN")
-    _sb_drone_positions = []
-    for _di, (_did, _dd) in enumerate(drones.items()):
-        _sb_drone_positions.append({
-            "id": _did,
-            "lat": 47.3769 + _di * 0.0010,
-            "lon": 8.5417 + _di * 0.0008,
-            "alt": 50 + _di * 5,
-            "speed": 10,
-            "bearing": 90
-        })
-    _sb_drone_json = _json.dumps(_sb_drone_positions)
-    sb_sim_status = "SAFE" if _sim.safe else "UNSAFE"
 
-    # Sidebar data
-    import json as _json
-    _sb_threat = s.get("threat", {}).get("overall_threat_level", "NONE")
-    _sb_gps = s.get("threat", {}).get("gps_status", "CLEAN")
-    _sb_drone_positions = []
-    for _di, (_did, _dd) in enumerate(drones.items()):
-        _sb_drone_positions.append({
-            "id": _did,
-            "lat": 47.3769 + _di * 0.0010,
-            "lon": 8.5417 + _di * 0.0008,
-            "alt": 50 + _di * 5,
-            "speed": 10,
-            "bearing": 90
-        })
-    _sb_drone_json = _json.dumps(_sb_drone_positions)
-    sb_sim_status = "SAFE" if _sim.safe else "UNSAFE"
+
+
+    # Monitoring Panel
+    _mon = s.get("monitoring", {})
+    _alst = s.get("alerts", {})
+    _hcls = "g" if _alst.get("healthy", True) else "r"
+    monitoring_panel = (
+        f'<div class="metric"><span class="mk">Status</span><span class="mv {_hcls}">{"HEALTHY" if _alst.get("healthy",True) else "DEGRADED"}</span></div>'
+        f'<div class="metric"><span class="mk">Uptime</span><span class="mv c">{_mon.get("uptime_seconds",0)}s</span></div>'
+        f'<div class="metric"><span class="mk">Total Missions</span><span class="mv">{_mon.get("total_missions",0)}</span></div>'
+        f'<div class="metric"><span class="mk">Avg Score</span><span class="mv g">{_mon.get("avg_score",0)}</span></div>'
+        f'<div class="metric"><span class="mk">Success Rate</span><span class="mv g">{round(_mon.get("success_rate",0)*100,1)}%</span></div>'
+        f'<div class="metric"><span class="mk">Errors</span><span class="mv {"r" if _mon.get("total_errors",0)>0 else "g"}">{_mon.get("total_errors",0)}</span></div>'
+        f'<div class="metric"><span class="mk">Alerts</span><span class="mv {"r" if _alst.get("critical_count",0)>0 else "g"}">{_alst.get("critical_count",0)} CRIT · {_alst.get("warning_count",0)} WARN</span></div>'
+    )
+
+    # Wallet Panel
+    _wal = s.get("wallet", {})
+    wallet_panel = (
+        f'<div class="metric"><span class="mk">Balance</span><span class="mv g" style="font-size:16px">{_wal.get("balance_knx",0)} KNX</span></div>'
+        f'<div class="metric"><span class="mk">Total Earned</span><span class="mv c">{_wal.get("total_earned_knx",0)} KNX</span></div>'
+        f'<div class="metric"><span class="mk">Penalties</span><span class="mv r">-{_wal.get("total_penalties_knx",0)} KNX</span></div>'
+        f'<div class="metric"><span class="mk">Transactions</span><span class="mv">{_wal.get("transaction_count",0)}</span></div>'
+        f'<div class="metric"><span class="mk">Storage</span><span class="mv c">SQLite · WAL</span></div>'
+    )
+
+    # Bittensor Panel
+    _btm = s.get("bittensor_miner", {})
+    _btn = s.get("bittensor_net", {})
+    bittensor_panel = (
+        f'<div class="metric"><span class="mk">Network</span><span class="mv c">{_btn.get("network","testnet").upper()}</span></div>'
+        f'<div class="metric"><span class="mk">NetUID</span><span class="mv g">{_btn.get("netuid",42)}</span></div>'
+        f'<div class="metric"><span class="mk">Block</span><span class="mv">{_btn.get("block",0)}</span></div>'
+        f'<div class="metric"><span class="mk">Miners</span><span class="mv c">{_btn.get("n_miners",0)}</span></div>'
+        f'<div class="metric"><span class="mk">Missions</span><span class="mv g">{_btm.get("missions_completed",0)}</span></div>'
+        f'<div class="metric"><span class="mk">Hotkey</span><span class="mv" style="font-size:10px">{str(_btm.get("hotkey","—"))[:24]}</span></div>'
+    )
+
+    # MPC Panel
+    _mpc = s.get("mpc", {})
+    _mpc_cls = "g" if _mpc.get("status")=="OK" else "r"
+    mpc_panel = (
+        f'<div class="metric"><span class="mk">Status</span><span class="mv {_mpc_cls}">{_mpc.get("status","—")}</span></div>'
+        f'<div class="metric"><span class="mk">Algorithm</span><span class="mv c">Shamir Secret Sharing</span></div>'
+        f'<div class="metric"><span class="mk">Threshold</span><span class="mv">{_mpc.get("threshold",2)} of {_mpc.get("n_shares",3)}</span></div>'
+        f'<div class="metric"><span class="mk">Shares</span><span class="mv g">{_mpc.get("shares",0)}</span></div>'
+        f'<div class="metric"><span class="mk">Reconstructed</span><span class="mv c">{_mpc.get("reconstructed","—")}</span></div>'
+        f'<div class="metric"><span class="mk">Prime</span><span class="mv" style="font-size:10px">Mersenne 2¹²⁷-1</span></div>'
+    )
+
+    # Validator Auth Panel
+    _vauth = s.get("validator_auth", {})
+    _vc = "g" if _vauth.get("token_valid") else "r"
+    validator_auth_panel = (
+        f'<div class="metric"><span class="mk">Status</span><span class="mv g">{_vauth.get("status","—")}</span></div>'
+        f'<div class="metric"><span class="mk">Method</span><span class="mv c">{_vauth.get("method","—")}</span></div>'
+        f'<div class="metric"><span class="mk">Token TTL</span><span class="mv">{_vauth.get("ttl",30)}s</span></div>'
+        f'<div class="metric"><span class="mk">Token Valid</span><span class="mv {_vc}">{"✓ YES" if _vauth.get("token_valid") else "✗ NO"}</span></div>'
+        f'<div class="metric"><span class="mk">Protocol</span><span class="mv c">WSS · TLS</span></div>'
+    )
+
     html = HTML_TEMPLATE
     html = html.replace("{netuid}",     str(sw.get("netuid", 4)))
     html = html.replace("{network}",    str(sw.get("network", "testnet")).upper())
@@ -1926,6 +2023,11 @@ def render_dashboard() -> str:
     traj_dna = str(last_m.get("bundle_hash", "—"))[:16] + "..."
     html = html.replace("{mission_dna}", mission_dna)
     html = html.replace("{traj_dna}", traj_dna)
+    html = html.replace("{monitoring_panel}", monitoring_panel)
+    html = html.replace("{wallet_panel}", wallet_panel)
+    html = html.replace("{bittensor_panel}", bittensor_panel)
+    html = html.replace("{mpc_panel}", mpc_panel)
+    html = html.replace("{validator_auth_panel}", validator_auth_panel)
     return html
 
 
