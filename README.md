@@ -1,174 +1,148 @@
-# DroneSync — Urban Drone Swarm Subnet on Konnex
+# DroneSync — Proof of Physical Work for Autonomous Drone Networks
 
-> Decentralized coordination of autonomous drone swarms in urban environments
-> using Proof-of-Physical-Work (PoPW) consensus, real-time sensor fusion,
-> and on-chain mission validation.
+> An open framework for cryptographic verification of real-world drone missions.
+> Every flight produces a tamper-evident PoPW record — signed, validated by
+> decentralized consensus, and ready for on-chain settlement.
 
-![Konnex](https://img.shields.io/badge/Konnex-Testnet-orange)
 ![Python](https://img.shields.io/badge/Python-3.10+-blue)
-![License](https://img.shields.io/badge/License-MIT-green)
+![License](https://img.shields.io/badge/License-Apache%202.0-green)
+![Tests](https://img.shields.io/badge/Tests-537%20passing-brightgreen)
 ![Status](https://img.shields.io/badge/Status-Prototype-yellow)
-![Score](https://img.shields.io/badge/Mission_Score-97%2F100-brightgreen)
-![Modules](https://img.shields.io/badge/Modules-9-blueviolet)
+![ZK](https://img.shields.io/badge/ZK-Groth16-purple)
 
 ---
 
 ## What is DroneSync?
-**DroneSync is a trust, validation and proof framework for autonomous drone missions.**
 
-Every mission produces a cryptographic Proof of Physical Work (PoPW) —
-verified by TEE attestation, approved by Byzantine-aware swarm consensus,
-and stored in an immutable on-chain history.
+DroneSync is a protocol for verifying physical work performed by autonomous drones.
 
-Core chain:
-```
-Mission → Planner → Validator → Score → PoPW → Consensus → History → Trust
-```
+Traditional blockchains verify **computation**.
+Traditional AI networks verify **inference**.
+DroneSync verifies **physical work**.
+
+Every mission produces a cryptographic Proof of Physical Work (PoPW) --
+signed with Ed25519, protected by Groth16 zero-knowledge proofs,
+and approved by reputation-weighted Byzantine-tolerant consensus.
+
+    Mission -> Planner -> Telemetry -> Ed25519 Sign -> ZK Proof -> Validator Consensus -> On-Chain
+
+---
+
+## Key Features
+
+- **PoPW Protocol** -- cryptographic proof that a drone completed a real mission
+- **Zero-Knowledge Proofs** -- Groth16 (circom + snarkjs) proves mission validity without revealing waypoints
+- **Reputation-Weighted Consensus** -- ELITE 4x / TRUSTED 3x / ACTIVE 2x / ROOKIE 1x
+- **Byzantine Fault Detection** -- automatic blacklist of malicious validators
+- **ReplayGuard** -- 1-hour deduplication window prevents replay attacks
+- **Validator Auth** -- HMAC-SHA256 inter-validator authentication
+- **AI Planner** -- learns from validator feedback, optimizes safety/efficiency/energy
+- **Federated Learning** -- drones improve together without sharing raw flight data
+- **MAVLink Adapter** -- bridge for real drone hardware integration
+- **Live Dashboard** -- Neural Cosmos visualization, real-time telemetry
 
 ---
 
 ## Architecture
+
+    +--------------------------------------------------------------+
+    |                      DroneSync Node                          |
+    |                                                              |
+    |  Mission Planner -> PoPW Verifier -> Swarm Consensus        |
+    |  Sensor Bundle  -> ReplayGuard   -> ZK Prover (Groth16)     |
+    |  Reward Engine  -> Validator Auth -> On-Chain Submission     |
+    +--------------------------------------------------------------+
+
 ---
 
 ## Modules
 
-| Module | File | Description |
+| Module | Path | Description |
 |--------|------|-------------|
-| Protocol | dronesync/protocol.py | Core data structures |
-| AI Planner | miner/planner.py | Learning trajectory optimizer |
-| City Map | miner/citymap.py | Real urban airspace data |
-| Weather | miner/weather.py | Flight condition analysis |
-| Energy | miner/energy.py | Battery optimization |
-| Simulator | environment/sim.py | Single + swarm simulation |
-| Obstacles | environment/obstacles.py | Dynamic obstacle tracking |
-| Security | dronesync/security.py | Anti-spoofing + signing |
-| Verifier | dronesync/verifier.py | TEE attestation + PoPW |
-| History | dronesync/mission_history.py | Statistics + logging |
-
----
-
-## Mission Types
-
-| Type | Description | Priority |
-|------|-------------|----------|
-| URBAN_DELIVERY | Last-mile package delivery | High |
-| SWARM_SURVEY | Multi-drone area mapping | Medium |
-| OBSTACLE_RACE | Dynamic avoidance course | High |
-| FORMATION_FLY | Coordinated swarm formation | Medium |
-| EMERGENCY_ROUTE | Priority routing around incidents | Critical |
-
----
-
-## Scoring System
-
-Validators score each mission on 4 weighted criteria:
-
-| Criterion | Weight | Description |
-|-----------|--------|-------------|
-| Safety | 40% | Altitude, collision avoidance, no-fly compliance |
-| Task Match | 30% | Destination accuracy, waypoint completion |
-| Efficiency | 20% | Route optimality, battery usage |
-| Sensor Quality | 10% | GPS accuracy, LiDAR data integrity |
-
-Current benchmark score: **97/100**
+| PoPW Verifier | dronesync/verifier.py | Record creation, Ed25519 signing |
+| Swarm Consensus | dronesync/swarm_consensus.py | Weighted voting, Byzantine detection |
+| ReplayGuard | dronesync/replay_guard.py | 1-hour dedup, replay prevention |
+| ZK Prover | dronesync/zk_prover.py | Groth16 proof generation + verification |
+| Validator Auth | dronesync/validator_auth.py | HMAC-SHA256 inter-validator auth |
+| Mission Planner | miner/planner.py | Basic + AI trajectory planning |
+| Reward Engine | dronesync/economics.py | Reward calculation, tier multipliers |
+| Federated Learning | dronesync/federated_learning.py | Privacy-preserving model aggregation |
+| MAVLink Adapter | dronesync/mavlink_adapter.py | Physical drone protocol bridge |
+| Validator Network | dronesync/validator_network.py | WebSocket validator mesh |
+| Wallet | dronesync/wallet.py | Transaction history, balance tracking |
+| Dashboard | dashboard/app.py | Web monitoring interface |
 
 ---
 
 ## Quick Start
 
-```bash
-git clone https://github.com/Oleksandrm80/dronesync-subnet.git
-cd dronesync-subnet
-pip install -r requirements.txt
-python main.py
-python3 demo_chain.py  # Full trust chain demo
-```
+    git clone https://github.com/Oleksandrm80/dronesync-subnet.git
+    cd dronesync-subnet
+    pip install -r requirements.txt
+    python main.py
 
 ---
 
-## Demo Output
+## Demo Scripts
+
+    python demo_depin.py              # Full DePIN cycle -- missions, rewards, wallet
+    python demo_federated.py          # Federated learning across drone fleet
+    python demo_validator_network.py  # Validator consensus network
+    python demo_zk_proof.py           # Zero-knowledge proof generation + verification
+    python demo_mavlink.py            # MAVLink telemetry bridge (requires drone)
+
+---
+
+## Testing
+
+    # Run all 537 tests
+    python -m pytest tests/ -v
+
+    # Run by category
+    python -m pytest tests/test_security.py -v
+    python -m pytest tests/test_chaos.py -v
+    python -m pytest tests/test_zk_setup.py -v
+    python -m pytest tests/test_integration.py -v
+
+537 tests passing across 41 test files -- unit, integration, security,
+chaos, concurrency, mutation, property-based, and ZK proof tests.
+
 ---
 
 ## Security
 
-DroneSync implements multi-layer security:
-
-- GPS Spoofing Detection — analyzes trajectory anomalies
-- HMAC Command Signing — every command cryptographically signed
-- Replay Attack Prevention — nonce-based command validation
-- Anomaly Detection — AI monitors for hijacking patterns
-- TEE Attestation — hardware-grade proof of execution
-
----
-
-## Cities Supported
-
-| City | No-Fly Zones | Airport | Hospital | Government |
-|------|-------------|---------|----------|------------|
-| Zurich | 3 | Yes | Yes | Yes |
-| Berlin | 3 | Yes | Yes | Yes |
-| Kyiv | 3 | Yes | Yes | Yes |
+| Threat | Mitigation |
+|--------|-----------|
+| GPS spoofing | Multi-waypoint consistency + IMU cross-validation |
+| Telemetry fabrication | Ed25519 hardware signature + consensus |
+| Replay attacks | ReplayGuard 1-hour dedup window |
+| Route exposure | Groth16 ZK proofs -- waypoints never revealed |
+| Unauthorized validators | HMAC-SHA256 auth, 30s TTL + nonce |
+| Byzantine validators | Reputation detector, auto-blacklist |
 
 ---
 
 ## Roadmap
 
-- [x] Single drone pipeline
-- [x] Multi-drone swarm coordination
+- [x] PoPW engine -- Ed25519 signing, SHA256 hashing
+- [x] Reputation-weighted consensus
+- [x] ReplayGuard -- replay attack prevention
+- [x] ZK proof system -- Groth16 (circom + snarkjs)
+- [x] Validator auth -- HMAC-SHA256
 - [x] AI trajectory planner
-- [x] Real urban city maps
-- [x] TEE attestation
-- [x] Security suite
-- [x] Weather module
-- [x] Energy optimizer
-- [x] Dynamic obstacles
-- [x] Mission history
-- [ ] Konnex SDK integration
-- [ ] WebSocket API
-- [ ] Web visualization dashboard
-- [ ] Isaac Sim integration
-- [ ] Real drone hardware support
+- [x] Federated learning
+- [x] MAVLink adapter
+- [x] Live dashboard -- Neural Cosmos visualization
+- [x] 537 passing tests
+- [ ] Real drone hardware integration
+- [ ] Decentralized network deployment
+- [ ] Security audit
+- [ ] Domain + HTTPS
 
 ---
 
-## Links
+## License
 
-- Konnex Testnet: https://subnets.testnet.konnex.world
-- Twitter: @OleksandrM80
-- Repository: https://github.com/Oleksandrm80/dronesync-subnet
-## API Documentation
+Apache 2.0 -- Copyright 2024 Oleksandr Malchev
 
-Full API reference: [docs/API.md](docs/API.md)
-
-## Testing
-
-Run all tests:
-    python3 -m pytest tests/ -v
-
-Run boundary tests:
-    python3 -m pytest tests/test_boundary.py -v
-
-Run integration tests:
-    python3 -m pytest tests/test_integration.py -v
-
-## Docker
-
-Build and run:
-    docker build -t dronesync .
-    docker run dronesync
-
-Or with docker-compose:
-    docker-compose up
-
-## CI/CD
-
-Automated tests run on every push via GitHub Actions.
-See .github/workflows/ci.yml
-
-## Security
-
-- HMAC-SHA256 command signing (DroneFirewall)
-- Replay attack prevention (ReplayGuard)
-- GPS spoofing detection (DroneSecuritySuite)
-- TEE attestation (PoPWRecord)
-- Immutable mission history (MissionHistory)
+Contributions welcome via pull requests.

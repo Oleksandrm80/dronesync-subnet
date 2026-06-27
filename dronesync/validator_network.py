@@ -64,7 +64,7 @@ class ValidatorNetwork:
                     return msg.get("vote")
         except asyncio.TimeoutError:
             logger.warning("Timeout from validator %s — node may be down", uri)
-        except websockets.exceptions.ConnectionRefusedError:
+        except websockets.exceptions.ConnectionClosedError:
             logger.warning("Node down: %s — skipping", uri)
         except websockets.exceptions.WebSocketException as e:
             logger.warning("WebSocket error from %s: %s", uri, e)

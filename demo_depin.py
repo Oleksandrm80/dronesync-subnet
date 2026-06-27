@@ -110,7 +110,7 @@ async def main():
             # Credit wallet
             tx = wallet.credit(
                 mission_id=m["mission_id"],
-                amount_knx=breakdown.final_reward,
+                amount=breakdown.final_reward,
                 reason=f"mission_reward_grade_{m['grade'].lower()}",
             )
             print(f"    Reward:    +{breakdown.final_reward:.4f} KNX "
