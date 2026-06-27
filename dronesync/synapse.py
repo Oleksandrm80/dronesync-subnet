@@ -133,9 +133,14 @@ class DroneNavSynapseHandler:
             return {"status": "REJECTED", "reason": "empty_task", "on_chain_ready": False}
         waypoints = synapse_task.get("waypoints", [])
         for wp in waypoints:
-            if len(wp) >= 2:
+            if isinstance(wp, dict):
+                lat, lon = float(wp.get("lat", 0)), float(wp.get("lon", 0))
+                alt = float(wp.get("alt", 0.0))
+            elif len(wp) >= 2:
                 lat, lon = float(wp[0]), float(wp[1])
                 alt = float(wp[2]) if len(wp) >= 3 else 0.0
+            else:
+                continue
                 if not (-90 <= lat <= 90) or not (-180 <= lon <= 180):
                     return {"status": "REJECTED", "reason": "invalid_gps_coordinates", "on_chain_ready": False}
                 if not (0 <= alt <= 500):
@@ -291,7 +296,9 @@ class SwarmSynapseHandler:
     def handle_swarm_task(self, synapse_task: Dict) -> Dict:
         results = {}
         for drone_id, handler in self.handlers.items():
-            results[drone_id] = handler.handle(synapse_task)
+            drone_task = dict(synapse_task)
+            drone_task["task_id"] = synapse_task.get("task_id", "TASK") + "_" + drone_id
+            results[drone_id] = handler.handle(drone_task)
 
         votes = [
             (d, results[d]["score"] >= 80)
