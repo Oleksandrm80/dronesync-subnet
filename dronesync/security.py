@@ -40,7 +40,7 @@ class Ed25519Signer:
     def sign(self, data: bytes) -> str:
         """Sign bytes, return hex signature."""
         if self._backend == "cryptography":
-            sig = self._private_key.sign(hashlib.sha256(data).digest())
+            sig = self._private_key.sign(data)
             return sig.hex()
         else:
             return hmac.new(self._secret, data, hashlib.sha256).hexdigest()

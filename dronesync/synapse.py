@@ -141,10 +141,10 @@ class DroneNavSynapseHandler:
                 alt = float(wp[2]) if len(wp) >= 3 else 0.0
             else:
                 continue
-                if not (-90 <= lat <= 90) or not (-180 <= lon <= 180):
-                    return {"status": "REJECTED", "reason": "invalid_gps_coordinates", "on_chain_ready": False}
-                if not (0 <= alt <= 500):
-                    return {"status": "REJECTED", "reason": "invalid_altitude", "on_chain_ready": False}
+            if not (-90 <= lat <= 90) or not (-180 <= lon <= 180):
+                return {"status": "REJECTED", "reason": "invalid_gps_coordinates", "on_chain_ready": False}
+            if not (0 <= alt <= 500):
+                return {"status": "REJECTED", "reason": "invalid_altitude", "on_chain_ready": False}
         battery = synapse_task.get("battery")
         if battery is not None and not (0 <= float(battery) <= 100):
             return {"status": "REJECTED", "reason": "invalid_battery", "on_chain_ready": False}

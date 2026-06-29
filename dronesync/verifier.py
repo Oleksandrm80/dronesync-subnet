@@ -25,7 +25,7 @@ class DroneKeyPair:
 
     def sign(self, data: bytes) -> str:
         import base64
-        sig = self._private_key.sign(hashlib.sha256(data).digest())
+        sig = self._private_key.sign(data)
         return base64.b64encode(sig).decode()
 
     @staticmethod
@@ -38,7 +38,7 @@ class DroneKeyPair:
             from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PublicKey
             vk = Ed25519PublicKey.from_public_bytes(pub_bytes)
             sig = base64.b64decode(signature_b64)
-            vk.verify(sig, hashlib.sha256(data).digest())
+            vk.verify(sig, data)
             return True
         except (InvalidSignature, Exception):
             return False

@@ -53,13 +53,22 @@ swarm = SwarmConsensus(drone_ids=DRONE_IDS)
 weather = WeatherService()
 energy = EnergyOptimizer()
 threat = ThreatDefense()
-metrics_collector = MetricsCollector()
-alert_manager = AlertManager(metrics_collector)
-miner_wallet = MinerWallet("MINER_001", persist_path=".dronesync_data/dashboard_wallet.db")
-miner_axon = MinerAxon("0x5a4E...51f2", "dronesync_hotkey_001")
-metagraph = SubnetMetagraph()
-metagraph.register_miner(miner_axon)
-validator_auth_obj = ValidatorAuth()
+metrics_collector = None
+alert_manager = None
+miner_wallet = None
+miner_axon = None
+metagraph = None
+validator_auth_obj = None
+
+def _init_services():
+    global metrics_collector, alert_manager, miner_wallet, miner_axon, metagraph, validator_auth_obj
+    metrics_collector = MetricsCollector()
+    alert_manager = AlertManager(metrics_collector)
+    miner_wallet = MinerWallet("MINER_001", persist_path=".dronesync_data/dashboard_wallet.db")
+    miner_axon = MinerAxon("0x5a4E...51f2", "dronesync_hotkey_001")
+    metagraph = SubnetMetagraph()
+    metagraph.register_miner(miner_axon)
+    validator_auth_obj = ValidatorAuth()
 # Фиксированные координаты дронов для карты (в процентах от размера карты)
 DRONE_COORDS = {
     "DRONE_001": {"x": 28, "y": 38, "tx": 62, "ty": 55},
@@ -2063,6 +2072,7 @@ class DashboardHandler(BaseHTTPRequestHandler):
 
 
 def run_dashboard(host: str = "127.0.0.1", port: int = 8080):
+    _init_services()
     logger.info("[DroneSync] Loading...")
     refresh_state()
     logger.info("[DroneSync] Background refresh every 30s...")

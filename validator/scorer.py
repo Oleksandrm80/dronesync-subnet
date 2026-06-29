@@ -186,7 +186,7 @@ class ValidatorIdentity:
             "timestamp": int(time.time())
         }
         payload_bytes = json.dumps(payload, sort_keys=True).encode()
-        sig = self._private_key.sign(hashlib.sha256(payload_bytes).digest())
+        sig = self._private_key.sign(payload_bytes)
         return {
             **payload,
             "signature": base64.b64encode(sig).decode(),
@@ -213,7 +213,7 @@ class ValidatorIdentity:
             pub_bytes = bytes.fromhex(signed_score["public_key"])
             vk = Ed25519PublicKey.from_public_bytes(pub_bytes)
             sig = base64.b64decode(signed_score["signature"])
-            vk.verify(sig, hashlib.sha256(payload_bytes).digest())
+            vk.verify(sig, payload_bytes)
             return True
         except (InvalidSignature, Exception):
             return False
