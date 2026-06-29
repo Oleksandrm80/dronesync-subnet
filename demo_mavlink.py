@@ -86,9 +86,19 @@ def _generate_popw(trajectory, sensor_data, source: str):
     print(f"  Origin: {first[0]:.6f}, {first[1]:.6f} @ {first[2]:.1f}m")
     print(f"  Dest:   {last[0]:.6f}, {last[1]:.6f} @ {last[2]:.1f}m")
 
+    # Calculate score from real MAVLink telemetry
+    frames = len(trajectory.positions)
+    max_alt = max(p[2] for p in trajectory.positions) if trajectory.positions else 0
+    max_speed = trajectory.max_speed if hasattr(trajectory, "max_speed") else 0
+    duration = trajectory.duration if hasattr(trajectory, "duration") else 0
+    score = 0.0
+    if frames >= 50: score += 30
+    if max_alt >= 10: score += 30
+    if max_speed >= 1.0: score += 20
+    if duration >= 20: score += 20
     pipeline = MissionPipeline()
-    result = pipeline.run(mission, trajectory=trajectory, sensor_data=sensor_data, score=75.0)
-    score = result.get("score", 0)
+    result = pipeline.run(mission, trajectory=trajectory, sensor_data=sensor_data, score=score)
+    score = max(score, result.get("score", 0))
     popw = result.get("popw", {})
 
     print(f"\n--- PoPW Result ---")

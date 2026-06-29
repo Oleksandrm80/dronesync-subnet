@@ -2062,7 +2062,7 @@ class DashboardHandler(BaseHTTPRequestHandler):
             self.wfile.write(html)
 
 
-def run_dashboard(host: str = "127.0.0.1", port: int = 8080):
+def run_dashboard(host: str = "0.0.0.0", port: int = 8080):
     logger.info("[DroneSync] Loading...")
     refresh_state()
     logger.info("[DroneSync] Background refresh every 30s...")

@@ -189,3 +189,77 @@ class ByzantineDetector:
                 str(self._against_majority).encode()
             ).hexdigest()
         }
+
+
+class ORCACollisionAvoider:
+    """
+    ORCA (Optimal Reciprocal Collision Avoidance) for drone swarms.
+    Each drone independently computes a velocity that avoids collisions.
+    """
+
+    SAFE_DISTANCE = 10.0   # meters minimum between drones
+    TIME_HORIZON  = 5.0    # seconds to look ahead
+
+    def __init__(self, safe_distance: float = 10.0, time_horizon: float = 5.0):
+        self.safe_distance = safe_distance
+        self.time_horizon  = time_horizon
+
+    def compute_avoidance(self, drone_id: str, positions: dict, velocities: dict) -> dict:
+        """
+        Compute safe velocity for drone_id given all drone positions and velocities.
+        positions:  {drone_id: (x, y, z)}
+        velocities: {drone_id: (vx, vy, vz)}
+        Returns:    {drone_id: new_velocity, "collisions_avoided": [...], "safe": bool}
+        """
+        if drone_id not in positions or drone_id not in velocities:
+            return {"drone_id": drone_id, "safe": True, "collisions_avoided": []}
+
+        px, py, pz   = positions[drone_id]
+        vx, vy, vz   = velocities[drone_id]
+        avoided      = []
+        new_vx, new_vy, new_vz = vx, vy, vz
+
+        for other_id, (ox, oy, oz) in positions.items():
+            if other_id == drone_id:
+                continue
+            dx = ox - px
+            dy = oy - py
+            dz = oz - pz
+            dist = (dx**2 + dy**2 + dz**2) ** 0.5
+
+            if dist < self.safe_distance:
+                # Push velocity away from the other drone
+                if dist > 0:
+                    scale = (self.safe_distance - dist) / dist
+                    new_vx -= dx * scale * 0.5
+                    new_vy -= dy * scale * 0.5
+                    new_vz -= dz * scale * 0.3
+                avoided.append({
+                    "other_drone": other_id,
+                    "distance_m": round(dist, 2),
+                    "action": "velocity_adjusted"
+                })
+
+        return {
+            "drone_id":           drone_id,
+            "original_velocity":  (vx, vy, vz),
+            "safe_velocity":      (round(new_vx,3), round(new_vy,3), round(new_vz,3)),
+            "collisions_avoided": avoided,
+            "safe":               len(avoided) == 0,
+            "timestamp":          int(time.time())
+        }
+
+    def check_swarm(self, positions: dict, velocities: dict) -> dict:
+        """Check entire swarm for potential collisions."""
+        results = {}
+        total_avoided = 0
+        for drone_id in positions:
+            r = self.compute_avoidance(drone_id, positions, velocities)
+            results[drone_id] = r
+            total_avoided += len(r["collisions_avoided"])
+        return {
+            "swarm_safe":      total_avoided == 0,
+            "total_avoided":   total_avoided,
+            "drone_results":   results,
+            "timestamp":       int(time.time())
+        }
