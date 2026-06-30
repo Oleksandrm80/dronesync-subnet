@@ -27,6 +27,7 @@ from dronesync.memory import DroneMemory
 from dronesync.storage import DroneStorage
 from dronesync.swarm_consensus import SwarmConsensus
 from miner.weather import WeatherService
+from dronesync.identity import DRONE_ID
 
 
 class MissionAdapter:
@@ -45,28 +46,33 @@ class MissionAdapter:
             try:
                 return max(-90.0, min(90.0, float(v)))
             except (TypeError, ValueError):
-                return 47.3769
+                raise ValueError(f"Invalid latitude: {v!r}")
         def _clamp_lon(v):
             try:
                 return max(-180.0, min(180.0, float(v)))
             except (TypeError, ValueError):
-                return 8.5417
+                raise ValueError(f"Invalid longitude: {v!r}")
         def _clamp_alt(v):
             try:
                 return max(0.0, min(500.0, float(v)))
             except (TypeError, ValueError):
                 return 50.0
 
+        if "lat" not in origin_raw or "lon" not in origin_raw:
+            raise ValueError("origin must include 'lat' and 'lon'")
+        if "lat" not in dest_raw or "lon" not in dest_raw:
+            raise ValueError("destination must include 'lat' and 'lon'")
+
         origin = type("Waypoint", (), {
-            "lat": _clamp_lat(origin_raw.get("lat", 47.3769)),
-            "lon": _clamp_lon(origin_raw.get("lon", 8.5417)),
+            "lat": _clamp_lat(origin_raw["lat"]),
+            "lon": _clamp_lon(origin_raw["lon"]),
             "alt": _clamp_alt(origin_raw.get("alt", 50)),
             "speed": _clamp_alt(origin_raw.get("speed", 5)),
         })
 
         destination = type("Waypoint", (), {
-            "lat": _clamp_lat(dest_raw.get("lat", 47.3800)),
-            "lon": _clamp_lon(dest_raw.get("lon", 8.5450)),
+            "lat": _clamp_lat(dest_raw["lat"]),
+            "lon": _clamp_lon(dest_raw["lon"]),
             "alt": _clamp_alt(dest_raw.get("alt", 50)),
             "speed": _clamp_alt(dest_raw.get("speed", 5)),
         })
@@ -75,9 +81,11 @@ class MissionAdapter:
         for wp in task.get("waypoints", []):
             if not isinstance(wp, dict):
                 continue
+            if "lat" not in wp or "lon" not in wp:
+                continue
             waypoints.append(type("Waypoint", (), {
-                "lat": _clamp_lat(wp.get("lat", 47.3780)),
-                "lon": _clamp_lon(wp.get("lon", 8.5430)),
+                "lat": _clamp_lat(wp["lat"]),
+                "lon": _clamp_lon(wp["lon"]),
                 "alt": _clamp_alt(wp.get("alt", 50)),
                 "speed": _clamp_alt(wp.get("speed", 5)),
             }))
@@ -101,12 +109,12 @@ class DroneNavSynapseHandler:
     Основной обработчик задания от валидатора Konnex.
 
     Использование:
-        handler = DroneNavSynapseHandler(drone_id="DRONE_001")
+        handler = DroneNavSynapseHandler(drone_id=DRONE_ID)
         response = handler.handle(synapse_task)
         # response содержит полный PoPW артефакт для on-chain scoring
     """
 
-    def __init__(self, drone_id: str = "DRONE_001", use_ai_planner: bool = False):
+    def __init__(self, drone_id: str = DRONE_ID, use_ai_planner: bool = False):
         self.drone_id = drone_id
         self.adapter = MissionAdapter()
         self.planner = AIPlanner() if use_ai_planner else DronePlanner()
@@ -352,7 +360,7 @@ def demo_synapse():
     print("validator_task_id: " + validator_task["task_id"])
     print()
 
-    handler = DroneNavSynapseHandler(drone_id="DRONE_001", use_ai_planner=True)
+    handler = DroneNavSynapseHandler(drone_id=DRONE_ID, use_ai_planner=True)
     response = handler.handle(validator_task)
 
     print("SINGLE DRONE RESPONSE:")

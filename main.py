@@ -496,7 +496,7 @@ def run_scoreroot():
     logger.info("=" * 50)
     logger.info("SCORE ROOT - VALIDATOR COMMITMENT")
     logger.info("=" * 50)
-    sr = ScoreRoot(validator_id="VALIDATOR_001")
+    sr = ScoreRoot(validator_id=VALIDATOR_ID)
     missions = [
         ("DSYNC_001", 97, "abc123", "def456"),
         ("DSYNC_002", 94, "bcd234", "efg567"),

@@ -161,10 +161,21 @@ class ValidatorIdentity:
     using only the public key.
     """
 
-    def __init__(self, validator_id: str):
+    def __init__(self, validator_id: str, key_path: str = ".dronesync_data/validator_key.pem"):
         self.validator_id = validator_id
+        import os
         from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
-        self._private_key = Ed25519PrivateKey.generate()
+        from cryptography.hazmat.primitives.serialization import (
+            Encoding, PrivateFormat, NoEncryption, load_pem_private_key
+        )
+        os.makedirs(os.path.dirname(key_path), exist_ok=True)
+        if os.path.exists(key_path):
+            with open(key_path, "rb") as f:
+                self._private_key = load_pem_private_key(f.read(), password=None)
+        else:
+            self._private_key = Ed25519PrivateKey.generate()
+            with open(key_path, "wb") as f:
+                f.write(self._private_key.private_bytes(Encoding.PEM, PrivateFormat.PKCS8, NoEncryption()))
         self._public_key = self._private_key.public_key()
 
     @property

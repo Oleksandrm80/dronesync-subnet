@@ -38,13 +38,15 @@ class DynamicObstacleManager:
     SAFE_DISTANCE_M = 50.0
     PREDICTION_TIME_S = 10.0
 
-    def __init__(self, seed: int = 42):
+    def __init__(self, seed: int = 42, origin_lat: float = 0.0, origin_lon: float = 0.0):
         self.obstacles: list = []
         self._rng = random.Random(seed)
+        self._origin_lat = origin_lat
+        self._origin_lon = origin_lon
         self._generate_urban_obstacles()
 
     def _generate_urban_obstacles(self):
-        """Generate realistic urban airspace obstacles."""
+        """Generate urban airspace obstacles relative to mission origin."""
         types = [
             ("drone", 8.0), ("bird", 12.0),
             ("helicopter", 20.0), ("drone", 6.0)
@@ -53,8 +55,8 @@ class DynamicObstacleManager:
             self.obstacles.append(MovingObstacle(
                 obstacle_id="OBS_" + str(i).zfill(3),
                 obs_type=obs_type,
-                lat=47.3769 + self._rng.uniform(-0.01, 0.01),
-                lon=8.5417 + self._rng.uniform(-0.01, 0.01),
+                lat=self._origin_lat + self._rng.uniform(-0.01, 0.01),
+                lon=self._origin_lon + self._rng.uniform(-0.01, 0.01),
                 alt=self._rng.uniform(30, 100),
                 speed_ms=speed + self._rng.uniform(-2, 2),
                 heading=self._rng.uniform(0, 360)

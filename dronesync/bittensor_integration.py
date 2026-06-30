@@ -10,9 +10,9 @@ import threading
 
 class SubnetConfig:
     """DroneSync subnet configuration for Bittensor."""
-    NETUID = 42  # subnet ID (placeholder until registered)
-    NETWORK = "testnet"
-    CHAIN_ENDPOINT = "wss://test.finney.opentensor.ai:443"
+    NETUID = 4   # Konnex subnet ID
+    NETWORK = "konnex-testnet"
+    CHAIN_ENDPOINT = "wss://test.finney.opentensor.ai:443"  # update to Konnex endpoint when available
     MIN_STAKE = 1000  # TAO required to be validator
     TEMPO = 360  # blocks per epoch (~1 hour)
 

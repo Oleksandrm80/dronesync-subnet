@@ -1,4 +1,6 @@
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
+from pydantic import BaseModel, Field, field_validator
+from typing import List, Optional
 import time
 
 from miner.planner import DronePlanner
@@ -8,6 +10,7 @@ from dronesync.verifier import PoPWRecord
 from dronesync.reputation import DroneReputation
 from dronesync.sensor_bundle import SensorBundle
 from validator.scoreroot import ScoreRoot
+from dronesync.identity import DRONE_ID, VALIDATOR_ID
 
 
 app = FastAPI(title="DroneSync API", version="1.0")
@@ -16,17 +19,49 @@ planner = DronePlanner()
 validator = DroneEvaluator()
 env = DroneEnvironment()
 popw = PoPWRecord()
-reputation = DroneReputation("DRONE_001")
-scoreroot = ScoreRoot("VALIDATOR_001")
+reputation = DroneReputation(DRONE_ID)
+scoreroot = ScoreRoot(VALIDATOR_ID)
 
 
-class FakeMission:
-    def __init__(self):
+class Waypoint(BaseModel):
+    lat: float = Field(..., ge=-90, le=90)
+    lon: float = Field(..., ge=-180, le=180)
+    alt: float = Field(..., gt=0)
+    speed: float = Field(default=5.0, gt=0)
+
+
+class MissionRequest(BaseModel):
+    origin: Waypoint
+    destination: Waypoint
+    waypoints: List[Waypoint] = Field(default_factory=list)
+    drone_id: str = Field(default=DRONE_ID)
+    mission_type: str = Field(default="urban_delivery")
+
+    @field_validator("mission_type")
+    @classmethod
+    def validate_mission_type(cls, v: str) -> str:
+        allowed = {"urban_delivery", "survey", "inspection", "emergency", "cargo"}
+        if v not in allowed:
+            raise ValueError(f"mission_type must be one of {allowed}")
+        return v
+
+
+class _WP:
+    def __init__(self, lat, lon, alt, speed):
+        self.lat = lat
+        self.lon = lon
+        self.alt = alt
+        self.speed = speed
+
+
+class _Mission:
+    def __init__(self, req: MissionRequest):
         self.mission_id = "DSYNC_" + str(int(time.time()))
-        self.origin = type("o", (), {"lat": 47.3769, "lon": 8.5417, "alt": 50, "speed": 5})
-        self.waypoints = [type("o", (), {"lat": 47.3780, "lon": 8.5430, "alt": 50, "speed": 5})]
-        self.destination = type("o", (), {"lat": 47.3800, "lon": 8.5450, "alt": 50, "speed": 5})
-        self.mission_type = type("o", (), {"value": "urban_delivery"})
+        self.origin = _WP(req.origin.lat, req.origin.lon, req.origin.alt, req.origin.speed)
+        self.destination = _WP(req.destination.lat, req.destination.lon, req.destination.alt, req.destination.speed)
+        self.waypoints = [_WP(w.lat, w.lon, w.alt, w.speed) for w in req.waypoints]
+        self.mission_type = type("MT", (), {"value": req.mission_type})
+        self.drone_id = req.drone_id
 
 
 @app.get("/")
@@ -38,7 +73,7 @@ def root():
 def drone_status():
     status = reputation.get_status()
     return {
-        "drone_id": "DRONE_001",
+        "drone_id": DRONE_ID,
         "reputation_score": status["reputation_score"],
         "tier": status["tier"],
         "on_chain_ready": True,
@@ -47,8 +82,8 @@ def drone_status():
 
 
 @app.post("/mission/run")
-def run_mission():
-    mission = FakeMission()
+def run_mission(req: MissionRequest):
+    mission = _Mission(req)
     trajectory = planner.plan_trajectory(mission)
     sensor_data = env.run(trajectory)
     score = validator.score(trajectory, sensor_data)
@@ -61,11 +96,12 @@ def run_mission():
     bundle = SensorBundle().pack(mission.mission_id, trajectory, sensor_data, record)
     from dronesync.economics import RewardCalculator
     _calc = RewardCalculator()
-    _reward = _calc.calculate(mission.mission_id, score/100.0, "EXCELLENT" if score >= 85 else "GOOD" if score >= 70 else "POOR", "ACTIVE")
-
+    tier = "EXCELLENT" if score >= 85 else "GOOD" if score >= 70 else "POOR"
+    _reward = _calc.calculate(mission.mission_id, score / 100.0, tier, "ACTIVE")
 
     return {
         "mission_id": mission.mission_id,
+        "drone_id": mission.drone_id,
         "score": score,
         "popw": {
             "trajectory_hash": record["trajectory_hash"][:16] + "...",

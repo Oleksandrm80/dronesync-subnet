@@ -22,6 +22,7 @@ import math
 
 from dronesync.protocol import MissionInstruction, Trajectory, SensorData
 from dronesync.verifier import PoPWRecord
+from dronesync.zk_prover import ZKProver, ZKVerifier
 from dronesync.swarm_consensus import SwarmConsensus
 from dronesync.threat_defense import ThreatDefense
 from dronesync.sensor_bundle import SensorBundle
@@ -47,6 +48,7 @@ class MissionPipeline:
         self.threat = ThreatDefense()
         self.popw = PoPWRecord()
         self.score_root = ScoreRoot(validator_id="pipeline_validator")
+        self.zk_prover = ZKProver()
         self._pipeline_log: list = []
 
         for drone_id, rep in self.drone_reputations.items():
@@ -155,6 +157,25 @@ class MissionPipeline:
         checks["score_root"] = root_hash[:16]
         self._log("score_committed", root=root_hash[:16])
 
+        # 8.5 ZK Proof
+        zk_proof = None
+        zk_verified = False
+        if self.zk_prover.is_available():
+            waypoints = [[p[0], p[1]] for p in trajectory.positions]
+            origin = trajectory.positions[0]
+            dest = trajectory.positions[-1]
+            zk_proof = self.zk_prover.generate_proof(
+                origin_lat=origin[0], origin_lon=origin[1],
+                dest_lat=dest[0], dest_lon=dest[1],
+                waypoints=waypoints,
+                score=float(score),
+                min_score=50.0
+            )
+            if zk_proof:
+                zk_verified = self.zk_prover.verify_proof(zk_proof)
+        checks["zk_proof_valid"] = zk_verified
+        self._log("zk_proof", generated=zk_proof is not None, verified=zk_verified)
+
         # 9. PoPW signed
         popw_record = self.popw.create_record(
             mission_id=mission.mission_id,
@@ -214,6 +235,7 @@ class MissionPipeline:
             "pipeline_hash": pipeline_hash,
             "elapsed_s": elapsed,
             "on_chain_ready": on_chain_ready,
+            "zk_proof": zk_proof.to_dict() if zk_proof else None,
             "status": "SUCCESS" if on_chain_ready else "FAILED"
         }
 

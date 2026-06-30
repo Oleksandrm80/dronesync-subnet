@@ -13,7 +13,7 @@ class MAVLinkEmulator:
     Generates realistic flight data for DroneSync testing.
     """
 
-    def __init__(self, start_lat: float = 50.4501, start_lon: float = 30.5234):
+    def __init__(self, start_lat: float = 0.0, start_lon: float = 0.0):
         self.lat = start_lat
         self.lon = start_lon
         self.alt = 0.0

@@ -29,6 +29,7 @@ from dronesync.mpc import ShamirSecretSharing
 from dronesync.validator_auth import ValidatorAuth
 from miner.energy import EnergyOptimizer
 from miner.planner import AIPlanner
+from dronesync.identity import DRONE_ID, VALIDATOR_ID
 logger = get_logger("dronesync.dashboard")
 
 state = {
@@ -43,7 +44,7 @@ state = {
     "uid": 136,
 }
 
-DRONE_IDS = ["DRONE_001", "DRONE_002", "DRONE_003"]
+DRONE_IDS = [DRONE_ID, "DRONE_002", "DRONE_003"]
 handlers = {d: DroneNavSynapseHandler(drone_id=d, use_ai_planner=True) for d in DRONE_IDS}
 node = KonnexNode(wallet_address="0x5a4E...51f2", network="testnet")
 node.connect()
@@ -71,7 +72,7 @@ def _init_services():
     validator_auth_obj = ValidatorAuth()
 # Фиксированные координаты дронов для карты (в процентах от размера карты)
 DRONE_COORDS = {
-    "DRONE_001": {"x": 28, "y": 38, "tx": 62, "ty": 55},
+    DRONE_ID: {"x": 28, "y": 38, "tx": 62, "ty": 55},
     "DRONE_002": {"x": 45, "y": 25, "tx": 72, "ty": 42},
     "DRONE_003": {"x": 35, "y": 58, "tx": 68, "ty": 30},
 }
@@ -117,14 +118,14 @@ def _parse_miner_logs() -> list:
 
 def _make_task(drone_idx: int = 0) -> dict:
     origins = [
-        {"lat": 47.3769, "lon": 8.5417, "alt": 50, "speed": 5},
-        {"lat": 47.3775, "lon": 8.5420, "alt": 55, "speed": 5},
-        {"lat": 47.3780, "lon": 8.5425, "alt": 45, "speed": 5},
+        {"lat": _DEMO_LAT + 0.0000, "lon": _DEMO_LON + 0.0000, "alt": 50, "speed": 5},
+        {"lat": _DEMO_LAT + 0.0006, "lon": _DEMO_LON + 0.0003, "alt": 55, "speed": 5},
+        {"lat": _DEMO_LAT + 0.0011, "lon": _DEMO_LON + 0.0008, "alt": 45, "speed": 5},
     ]
     dests = [
-        {"lat": 47.3820, "lon": 8.5460, "alt": 50, "speed": 5},
-        {"lat": 47.3825, "lon": 8.5465, "alt": 55, "speed": 5},
-        {"lat": 47.3830, "lon": 8.5470, "alt": 45, "speed": 5},
+        {"lat": _DEMO_LAT + 0.0051, "lon": _DEMO_LON + 0.0043, "alt": 50, "speed": 5},
+        {"lat": _DEMO_LAT + 0.0056, "lon": _DEMO_LON + 0.0048, "alt": 55, "speed": 5},
+        {"lat": _DEMO_LAT + 0.0061, "lon": _DEMO_LON + 0.0053, "alt": 45, "speed": 5},
     ]
     return {
         "task_id": "KNX_" + str(int(time.time() * 1000))[-8:],
@@ -209,7 +210,7 @@ def refresh_state():
         state["mpc"] = {"status":"ERROR","error":str(_e)}
 
     # Validator Auth
-    _tok = validator_auth_obj.generate_token("VALIDATOR_001")
+    _tok = validator_auth_obj.generate_token(VALIDATOR_ID)
     state["validator_auth"] = {"status":"ACTIVE","token_valid":validator_auth_obj.verify_token(_tok),"ttl":ValidatorAuth.TOKEN_TTL,"method":"HMAC-SHA256"}
 
     # Threat defense
@@ -224,12 +225,12 @@ def refresh_state():
     state["weather"] = weather.get_current().__dict__
 
     # Energy
-    positions = [[47.3769, 8.5417, 50], [47.38, 8.545, 50]]
+    positions = [[_DEMO_LAT, _DEMO_LON, 50], [_DEMO_LAT + 0.003, _DEMO_LON + 0.003, 50]]
     state["energy"] = energy.analyze_trajectory(positions)
     # Score Root
 
     from validator.scoreroot import ScoreRoot
-    sc = ScoreRoot("VALIDATOR_001")
+    sc = ScoreRoot(VALIDATOR_ID)
     for d in DRONE_IDS:
         sc.add_score(d, state["drones"][d]["score"], state["drones"][d]["bundle_hash"], state["drones"][d]["bundle_hash"])
     state["score_root"] = sc.commit()
@@ -725,8 +726,8 @@ if (_sideRadarEl) {{
   <div class="map-wrap">
     <div class="map-grid"></div>
     <canvas id="mapCanvas"></canvas>
-    <div class="map-label">ZURICH AIRSPACE · ALT 50-130M</div>
-    <div class="map-coords" id="mapCoords">LAT 47.3769 · LON 8.5417</div>
+    <div class="map-label">DRONE AIRSPACE · ALT 50-130M</div>
+    <div class="map-coords" id="mapCoords">LAT -- · LON --</div>
     <!-- No-fly zones -->
     <div class="nfz" style="width:80px;height:80px;left:15%;top:20%"><span class="nfz-label">AIRPORT</span></div>
     <div class="nfz" style="width:60px;height:60px;left:60%;top:55%"><span class="nfz-label">HOSPITAL</span></div>
@@ -1611,9 +1612,9 @@ def render_dashboard() -> str:
     sim_flight_html = ""
     swarm_targets_html = ""
     _wps = [
-        Waypoint(lat=47.3769, lon=8.5417, alt=50, speed=10),
-        Waypoint(lat=47.3800, lon=8.5450, alt=55, speed=10),
-        Waypoint(lat=47.3820, lon=8.5460, alt=50, speed=10),
+        Waypoint(lat=_DEMO_LAT + 0.0000, lon=_DEMO_LON + 0.0000, alt=50, speed=10),
+        Waypoint(lat=_DEMO_LAT + 0.0031, lon=_DEMO_LON + 0.0033, alt=55, speed=10),
+        Waypoint(lat=_DEMO_LAT + 0.0051, lon=_DEMO_LON + 0.0043, alt=50, speed=10),
     ]
     _sim = nav_engine.sim_flight(_wps)
     _etas = nav_engine.calculate_etas(_sim.segments)
@@ -1639,7 +1640,7 @@ def render_dashboard() -> str:
         f'<div class="metric"><span class="mk">Vert. Clearance</span><span class="mv">10.0 m</span></div>'
     )
     _swarm_data = [
-        {"drone_id": d, "lat": 47.38, "lon": 8.54, "alt": 50, "speed": 10, "bearing_deg": 90}
+        {"drone_id": d, "lat": _DEMO_LAT + 0.003, "lon": _DEMO_LON + 0.003, "alt": 50, "speed": 10, "bearing_deg": 90}
         for d in drones
     ]
     _targets = nav_engine.track_swarm(_swarm_data)
@@ -1838,7 +1839,7 @@ def render_dashboard() -> str:
     # Validator Identity Panel
     try:
         from validator.scorer import ValidatorIdentity
-        _vi = ValidatorIdentity("VALIDATOR_001")
+        _vi = ValidatorIdentity(VALIDATOR_ID)
         validator_identity_panel = (
         f'<div class="metric"><span class="mk">Validator</span><span class="mv g">VALIDATOR_001</span></div>'
         f'<div class="metric"><span class="mk">Signing</span><span class="mv g">Ed25519</span></div>'
@@ -1871,8 +1872,8 @@ def render_dashboard() -> str:
     for _di, (_did, _dd) in enumerate(drones.items()):
         _sb_drone_positions.append({
             "id": _did,
-            "lat": 47.3769 + _di * 0.0010,
-            "lon": 8.5417 + _di * 0.0008,
+            "lat": _DEMO_LAT + _di * 0.0010,
+            "lon": _DEMO_LON + _di * 0.0008,
             "alt": 50 + _di * 5,
             "speed": 10,
             "bearing": 90

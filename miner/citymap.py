@@ -58,9 +58,9 @@ class CityMap:
         }
     }
 
-    def __init__(self, city: str = "zurich"):
+    def __init__(self, city: str = None):
         self.city = city
-        self.profile: dict = self.CITY_PROFILES.get(city, self.CITY_PROFILES["zurich"])
+        self.profile: dict = self.CITY_PROFILES.get(city or "", {}).copy() if city else {}
         self.zones = self._load_zones()
 
     def _load_zones(self) -> list:
