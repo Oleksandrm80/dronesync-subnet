@@ -15,7 +15,7 @@ from dronesync.replay_guard import ReplayGuard
 class FakeMission:
     def __init__(self):
         self.mission_id = "CHAIN_" + str(int(time.time()))
-        self.origin = type("o", (), {"lat": 47.3769, "lon": 8.5417, "alt": 50, "speed": 5})
+        self.origin = type("o", (), {"lat": 0.0, "lon": 0.0, "alt": 50, "speed": 5})
         self.waypoints = [type("o", (), {"lat": 47.3780, "lon": 8.5430, "alt": 50, "speed": 5})]
         self.destination = type("o", (), {"lat": 47.3800, "lon": 8.5450, "alt": 50, "speed": 5})
         self.mission_type = type("o", (), {"value": "urban_delivery"})

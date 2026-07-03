@@ -126,7 +126,7 @@ class ZKProver:
 
             # Generate proof
             r = subprocess.run(
-                ["npx", "snarkjs", "groth16", "prove",
+                ["node", os.path.join(self.zk_dir, "node_modules/.bin/snarkjs"), "groth16", "prove",
                  self._zkey, witness_path, proof_path, public_path],
                 capture_output=True, text=True
             )
@@ -158,7 +158,7 @@ class ZKProver:
                 json.dump(flight_proof.public, f)
 
             r = subprocess.run(
-                ["npx", "snarkjs", "groth16", "verify",
+                ["node", os.path.join(self.zk_dir, "node_modules/.bin/snarkjs"), "groth16", "verify",
                  self._vkey, public_path, proof_path],
                 capture_output=True, text=True
             )

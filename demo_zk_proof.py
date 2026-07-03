@@ -25,8 +25,8 @@ def main():
         return
 
     print("\n[1] Mission parameters (PUBLIC — visible to everyone):")
-    origin = (50.4501, 30.5234)
-    dest = (50.4520, 30.5250)
+    origin = (0.0, 0.0)
+    dest = (0.05, 0.05)
     min_score = 60.0
     print(f"    Origin:    {origin[0]}, {origin[1]}")
     print(f"    Dest:      {dest[0]}, {dest[1]}")
@@ -34,11 +34,11 @@ def main():
 
     print("\n[2] Secret trajectory (PRIVATE — never revealed):")
     waypoints = [
-        [50.4501, 30.5234],
-        [50.4505, 30.5238],
+        [0.0, 0.0],
+        [0.01, 0.01],
         [50.4510, 30.5242],
         [50.4515, 30.5246],
-        [50.4520, 30.5250],
+        [0.05, 0.05],
     ]
     score = 87.0
     for i, wp in enumerate(waypoints):

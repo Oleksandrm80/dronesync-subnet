@@ -22,6 +22,7 @@ import math
 
 from dronesync.protocol import MissionInstruction, Trajectory, SensorData
 from dronesync.verifier import PoPWRecord
+from dronesync.identity import DRONE_ID
 from dronesync.zk_prover import ZKProver, ZKVerifier
 from dronesync.swarm_consensus import SwarmConsensus
 from dronesync.threat_defense import ThreatDefense
@@ -42,7 +43,7 @@ def _haversine_km(lat1, lon1, lat2, lon2) -> float:
 
 class MissionPipeline:
     def __init__(self, drone_ids: Optional[list] = None, drone_reputations: Optional[dict] = None):
-        self.drone_ids = drone_ids or ["DRONE_001"]
+        self.drone_ids = drone_ids or [DRONE_ID]
         self.drone_reputations = drone_reputations or {}
         self.consensus = SwarmConsensus(self.drone_ids)
         self.threat = ThreatDefense()
@@ -57,7 +58,7 @@ class MissionPipeline:
 
     def run(self, mission: MissionInstruction, trajectory: Trajectory,
             sensor_data: SensorData, score: int,
-            executing_drone_id: str = "DRONE_001") -> dict:
+            executing_drone_id: str = DRONE_ID) -> dict:
 
         start_time = time.time()
         self._pipeline_log = []

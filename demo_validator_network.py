@@ -74,7 +74,7 @@ async def main():
         "computation_hash": "a3f9c2e1b8d7f4a6c0e3b1d9f2a5c8e0",
         "constraints_satisfied": True,
         "trajectory_positions": [
-            [50.4501, 30.5234, 50.0, time.time()],
+            [0.0, 0.0, 50.0, time.time()],
             [50.4510, 30.5240, 55.0, time.time() + 5],
             [50.4520, 30.5250, 60.0, time.time() + 10],
         ],

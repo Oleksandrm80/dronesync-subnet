@@ -46,7 +46,7 @@ def test_optimal_speed_is_reasonable():
 # --- WeatherService ---
 
 def test_weather_returns_condition():
-    service = WeatherService(city="zurich")
+    service = WeatherService(lat=47.3769, lon=8.5417)
     cond = service.get_current()
     assert isinstance(cond, WeatherCondition)
     assert cond.wind_speed >= 0

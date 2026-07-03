@@ -31,7 +31,7 @@ def cmd_weather(args):
     from miner.weather import WeatherService, WeatherImpactAnalyzer
     from miner.planner import DronePlanner
     from main import FakeMission
-    service = WeatherService(city=args.city)
+    service = WeatherService(lat=args.lat, lon=args.lon)
     weather = service.get_current()
     mission = FakeMission()
     planner = DronePlanner()
@@ -89,12 +89,13 @@ commands:
     sub.add_parser("security", help="Security + threat defense")
 
     w = sub.add_parser("weather", help="Weather impact analysis")
-    w.add_argument("--city", default="zurich", choices=["zurich", "berlin", "kyiv"])
+    w.add_argument("--lat", type=float, default=None, help="Latitude")
+    w.add_argument("--lon", type=float, default=None, help="Longitude")
 
     sub.add_parser("energy", help="Energy optimizer")
 
     cm = sub.add_parser("citymap", help="City no-fly zones")
-    cm.add_argument("--city", default="zurich", choices=["zurich", "berlin", "kyiv"])
+    cm.add_argument("--city", default=None, choices=["zurich", "berlin", "kyiv"])
 
     sub.add_parser("test", help="Run test suite")
 

@@ -1,15 +1,16 @@
 """
 generate_test_tlog.py
 Generates a realistic MAVLink telemetry log for testing.
-Simulates a drone flying from Kyiv center to 500m north.
+Simulates a drone flying 500m north from a given origin.
+Usage: python generate_test_tlog.py [--lat LAT] [--lon LON] [--out PATH]
 """
 
 import struct
 import time
 import math
 import os
+import argparse
 
-# MAVLink message IDs
 GLOBAL_POSITION_INT = 33
 ATTITUDE = 30
 BATTERY_STATUS = 147
@@ -31,10 +32,8 @@ def mavlink_checksum(data):
     return crc
 
 def write_frame(f, msg_id, payload, ts):
-    # Write timestamp prefix (8 bytes, microseconds)
     ts_us = int(ts * 1e6)
     f.write(struct.pack('<Q', ts_us))
-    
     seq = 0
     sys_id = 1
     comp_id = 1
@@ -47,29 +46,23 @@ def write_frame(f, msg_id, payload, ts):
     frame = header + payload + struct.pack('<H', crc)
     f.write(frame)
 
-def generate_tlog(path, duration=30, hz=5):
-    # Kyiv coordinates
-    base_lat = 50.4501
-    base_lon = 30.5234
+def generate_tlog(path, base_lat=0.0, base_lon=0.0, duration=30, hz=5):
     base_alt = 50.0
-
     n_frames = duration * hz
-    
+
     with open(path, 'wb') as f:
         for i in range(n_frames):
             ts = time.time() - duration + i / hz
             progress = i / n_frames
-            
-            # Fly north 500m
-            lat = base_lat + progress * 0.0045  # ~500m north
+
+            lat = base_lat + progress * 0.0045
             lon = base_lon
-            alt = base_alt + math.sin(progress * math.pi) * 20  # climb then descend
-            vx = int(3.0 * 100)  # 3 m/s north
+            alt = base_alt + math.sin(progress * math.pi) * 20
+            vx = int(3.0 * 100)
             vy = 0
             vz = 0
             hdg = 0
 
-            # GLOBAL_POSITION_INT
             payload = (pack_uint32(int(ts * 1000)) +
                       pack_int32(int(lat * 1e7)) +
                       pack_int32(int(lon * 1e7)) +
@@ -81,7 +74,6 @@ def generate_tlog(path, duration=30, hz=5):
                       pack_uint16(hdg))
             write_frame(f, GLOBAL_POSITION_INT, payload, ts)
 
-            # ATTITUDE
             roll = 0.02
             pitch = 0.01
             yaw = 0.0
@@ -98,5 +90,9 @@ def generate_tlog(path, duration=30, hz=5):
     print(f"File size: {os.path.getsize(path)} bytes")
 
 if __name__ == "__main__":
-    path = "zk/test_flight.tlog"
-    generate_tlog(path, duration=30, hz=5)
+    parser = argparse.ArgumentParser(description="Generate MAVLink test tlog")
+    parser.add_argument("--lat", type=float, default=0.0, help="Base latitude")
+    parser.add_argument("--lon", type=float, default=0.0, help="Base longitude")
+    parser.add_argument("--out", default="zk/test_flight.tlog", help="Output path")
+    args = parser.parse_args()
+    generate_tlog(args.out, base_lat=args.lat, base_lon=args.lon)

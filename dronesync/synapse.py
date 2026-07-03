@@ -28,6 +28,7 @@ from dronesync.storage import DroneStorage
 from dronesync.swarm_consensus import SwarmConsensus
 from miner.weather import WeatherService
 from dronesync.identity import DRONE_ID
+from dronesync.tx_queue import TxQueue
 
 
 class MissionAdapter:
@@ -247,7 +248,7 @@ class DroneNavSynapseHandler:
 
             duration = round(time.time() - t_start, 3)
 
-            return {
+            result = {
                 "mission_id": mission.mission_id,
                 "status": "OK",
                 "score": score,
@@ -278,6 +279,9 @@ class DroneNavSynapseHandler:
                 },
                 "duration_s": duration,
             }
+
+            TxQueue().enqueue(result)
+            return result
 
         except Exception as e:
             return {
@@ -347,10 +351,10 @@ def demo_synapse():
     validator_task = {
         "task_id": "KNX_TASK_" + str(int(time.time())),
         "mission_type": "urban_delivery",
-        "origin": {"lat": 47.3769, "lon": 8.5417, "alt": 50, "speed": 5},
-        "destination": {"lat": 47.3820, "lon": 8.5460, "alt": 50, "speed": 5},
+        "origin": {"lat": 0.0, "lon": 0.0, "alt": 50, "speed": 5},
+        "destination": {"lat": 0.05, "lon": 0.05, "alt": 50, "speed": 5},
         "waypoints": [
-            {"lat": 47.3790, "lon": 8.5435, "alt": 50, "speed": 5},
+            {"lat": 0.025, "lon": 0.025, "alt": 50, "speed": 5},
         ],
         "drone_count": 1,
         "payload_kg": 0.5,

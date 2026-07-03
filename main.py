@@ -1,3 +1,4 @@
+from dronesync.identity import DRONE_ID, VALIDATOR_ID
 from dronesync.synapse import demo_synapse
 from dronesync.threat_defense import ThreatDefense
 from dronesync.node import KonnexNode
@@ -24,13 +25,13 @@ from dronesync.logger import get_logger
 logger = get_logger("dronesync.main")
 
 class FakeMission:
-    def __init__(self, origin=(47.3769, 8.5417), destination=(47.3800, 8.5450)):
+    def __init__(self, origin=(0.0, 0.0), destination=(0.1, 0.1)):
         self.mission_id = "DSYNC_" + str(int(__import__("time").time()))
         self.origin = type("obj", (), {
             "lat": origin[0], "lon": origin[1], "alt": 50, "speed": 5
         })
         self.waypoints = [
-            type("obj", (), {"lat": 47.3780, "lon": 8.5430, "alt": 50, "speed": 5}),
+            type("obj", (), {"lat": (origin[0]+destination[0])/2, "lon": (origin[1]+destination[1])/2, "alt": 50, "speed": 5}),
         ]
         self.destination = type("obj", (), {
             "lat": destination[0], "lon": destination[1], "alt": 50, "speed": 5
@@ -69,9 +70,9 @@ def run_swarm():
     logger.info("SWARM MISSION - 3 DRONES")
     logger.info("=" * 50)
     missions = [
-        FakeMission(origin=(47.3769, 8.5417), destination=(47.3820, 8.5460)),
-        FakeMission(origin=(47.3775, 8.5420), destination=(47.3825, 8.5465)),
-        FakeMission(origin=(47.3780, 8.5425), destination=(47.3830, 8.5470)),
+        FakeMission(origin=(0.0, 0.0), destination=(0.1, 0.1)),
+        FakeMission(origin=(0.0, 0.0), destination=(0.05, 0.05)),
+        FakeMission(origin=(0.0, 0.0), destination=(0.1, 0.1)),
     ]
     planner = DronePlanner()
     trajectories = [planner.plan_trajectory(m) for m in missions]
@@ -111,15 +112,15 @@ def run_ai_planner():
 
 def run_city_map():
     logger.info("=" * 50)
-    logger.info("CITY MAP - ZURICH URBAN AIRSPACE")
+    logger.info("CITY MAP - URBAN AIRSPACE")
     logger.info("=" * 50)
-    city = CityMap(city="zurich")
+    city = CityMap()
     stats = city.get_city_stats()
-    logger.info("city: " + stats["city"])
+    logger.info("city: " + str(stats["city"] or "global"))
     logger.info("no-fly zones: " + str(stats["no_fly_zones"]))
     logger.info("zone types: " + str(stats["zone_types"]))
     test_points = [
-        (47.3769, 8.5417, "city center"),
+        (0.0, 0.0, "origin"),
         (47.4647, 8.5492, "near airport"),
         (47.3744, 8.5373, "near hospital"),
     ]
@@ -191,9 +192,9 @@ def run_security():
 
 def run_weather():
     logger.info("=" * 50)
-    logger.info("WEATHER MODULE - ZURICH CONDITIONS")
+    logger.info("WEATHER MODULE - CURRENT CONDITIONS")
     logger.info("=" * 50)
-    weather_service = WeatherService(city="zurich")
+    weather_service = WeatherService()
     weather = weather_service.get_current()
     mission = FakeMission()
     planner = DronePlanner()
@@ -213,7 +214,7 @@ def run_energy():
     logger.info("=" * 50)
     logger.info("ENERGY OPTIMIZER")
     logger.info("=" * 50)
-    mission = FakeMission()
+    mission = FakeMission(origin=(0.0, 0.0), destination=(0.005, 0.005))
     planner = DronePlanner()
     trajectory = planner.plan_trajectory(mission)
     battery = BatteryModel(capacity_wh=100.0, payload_kg=0.5)
@@ -305,7 +306,7 @@ def run_reputation():
     logger.info("=" * 50)
     logger.info("DRONE REPUTATION SCORE")
     logger.info("=" * 50)
-    rep = DroneReputation(drone_id="DRONE_001")
+    rep = DroneReputation(drone_id=DRONE_ID)
     missions = [
         ("DSYNC_001", 97, True, 7.0),
         ("DSYNC_002", 95, True, 7.5),
@@ -328,7 +329,7 @@ def run_firewall():
     logger.info("=" * 50)
     logger.info("DRONE FIREWALL - COMMAND FILTER")
     logger.info("=" * 50)
-    fw = DroneFirewall(drone_id="DRONE_001")
+    fw = DroneFirewall(drone_id=DRONE_ID)
     import time
     now = int(time.time())
     commands = [
@@ -356,7 +357,7 @@ def run_last_will():
     mission = FakeMission()
     planner = DronePlanner()
     trajectory = planner.plan_trajectory(mission)
-    last_will = DroneLastWill(drone_id="DRONE_001")
+    last_will = DroneLastWill(drone_id=DRONE_ID)
     record = last_will.simulate_crash(trajectory.positions, mission.mission_id)
     logger.info("type: " + record["type"])
     logger.info("drone_id: " + record["drone_id"])
@@ -377,7 +378,7 @@ def run_memory():
     mission = FakeMission()
     planner = DronePlanner()
     trajectory = planner.plan_trajectory(mission)
-    mem = DroneMemory(drone_id="DRONE_001")
+    mem = DroneMemory(drone_id=DRONE_ID)
     for i in range(5):
         mem.record_flight(trajectory.positions, duration_s=120.0, wind_ms=3.0)
     record = mem.get_memory_record()
@@ -417,12 +418,12 @@ def run_emergency():
     override = EmergencyOverride()
     emergency = override.broadcast_emergency(
         emergency_type="FIRE",
-        location={"lat": 47.3780, "lon": 8.5430},
+        location={"lat": 0.05, "lon": 0.05},
         authority_id="ZURICH_FIRE_DEPT_001"
     )
     logger.info("emergency_id: " + emergency["emergency_id"])
     logger.info("type: " + emergency["type"] + " | needs: " + str(emergency["needs"]))
-    drone_pos = [47.3782, 8.5432, 50.0]
+    drone_pos = [0.05, 0.05, 50.0]
     # cargo дрон — перехватывается пожаром
     c1 = override.check_drone_override(drone_pos, emergency, mission_type="urban_delivery")
     logger.info("urban_delivery (cargo): override=" + str(c1["override"]) + " -> " + c1.get("action", c1.get("reason", "")))
@@ -430,7 +431,7 @@ def run_emergency():
     c2 = override.check_drone_override(drone_pos, emergency, mission_type="organ_delivery")
     logger.info("organ_delivery (medical): override=" + str(c2["override"]) + " -> " + c2.get("reason", "") + " | " + c2.get("note", ""))
     # medical emergency — нужен именно medical дрон
-    med_em = override.broadcast_emergency("MEDICAL_EMERGENCY", {"lat": 47.3780, "lon": 8.5430}, "ZURICH_HOSPITAL_001")
+    med_em = override.broadcast_emergency("MEDICAL_EMERGENCY", {"lat": 0.05, "lon": 0.05}, "ZURICH_HOSPITAL_001")
     c3 = override.check_drone_override(drone_pos, med_em, mission_type="organ_delivery")
     logger.info("organ_delivery vs MEDICAL_EMERGENCY: override=" + str(c3["override"]) + " -> " + c3.get("action", c3.get("reason", "")))
     status = override.get_status()
@@ -444,7 +445,7 @@ def run_storage():
     logger.info("=" * 50)
     logger.info("PERSISTENT STORAGE - DRONE STATE")
     logger.info("=" * 50)
-    storage = DroneStorage(drone_id="DRONE_001")
+    storage = DroneStorage(drone_id=DRONE_ID)
     storage.clear()
     for i in range(3):
         storage.append_mission({
@@ -456,7 +457,7 @@ def run_storage():
     storage.update_reputation(score=72, tier="TRUSTED")
     missions = storage.get_missions()
     rep = storage.get_reputation()
-    logger.info("drone_id: DRONE_001")
+    logger.info(f"drone_id: {DRONE_ID}")
     logger.info("missions_saved: " + str(len(missions)))
     logger.info("last_mission: " + missions[-1]["mission_id"] + " | score=" + str(missions[-1]["score"]))
     logger.info("reputation_score: " + str(rep["score"]) + " | tier: " + rep["tier"])
@@ -539,6 +540,9 @@ def run_demo():
     run_sensor_bundle()
     demo_synapse()
     logger.info("DroneSync pipeline completed successfully")
+    from dronesync.tx_queue import TxQueue
+    stats = TxQueue().get_stats()
+    logger.info("tx_queue: submitted=" + str(stats["submitted"]) + " | pending=" + str(stats["pending"]) + " | endpoint=" + str(stats["endpoint"]))
     logger.info("PoPW artifact ready for on-chain submission")
 
 

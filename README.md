@@ -6,8 +6,8 @@
 
 ![Python](https://img.shields.io/badge/Python-3.10+-blue)
 ![License](https://img.shields.io/badge/License-Apache%202.0-green)
-![Tests](https://img.shields.io/badge/Tests-537%20passing-brightgreen)
-![Status](https://img.shields.io/badge/Status-Prototype-yellow)
+![Tests](https://img.shields.io/badge/Tests-541%20passing-brightgreen)
+![Status](https://img.shields.io/badge/Status-Working%20Demo-brightgreen)
 ![ZK](https://img.shields.io/badge/ZK-Groth16-purple)
 
 ---
@@ -146,3 +146,46 @@ chaos, concurrency, mutation, property-based, and ZK proof tests.
 Apache 2.0 -- Copyright 2024 Oleksandr Malchev
 
 Contributions welcome via pull requests.
+
+## Konnex Network — NETUID 4
+
+DroneSync is built as a subnet on Konnex — a decentralized network for physical-world AI.
+
+- **NETUID**: 4
+- **Network**: konnex-testnet
+- **Category**: Drone navigation & swarm coordination + Sensor fusion & PoPW validation
+- **Token**: KNX (earned by drone operators for completing verified missions)
+
+### How it works
+
+1. Drone operator runs DroneSync miner node
+2. Drone executes mission → generates PoPW proof
+3. Validator verifies proof → sets weights on-chain
+4. Operator earns KNX tokens proportional to mission quality
+
+---
+
+## Quick Start
+
+### Option 1 — Docker (recommended)
+
+    git clone https://github.com/oleksandrm80/dronesync-subnet.git
+    cd dronesync-subnet
+    cp .env.example .env
+    docker compose up -d
+
+Services: Miner on port 8080, Dashboard on port 8888.
+
+### Option 2 — Local
+
+    git clone https://github.com/oleksandrm80/dronesync-subnet.git
+    cd dronesync-subnet
+    python3 -m venv venv && source venv/bin/activate
+    pip install -r requirements.txt
+    python3 main.py
+
+### Connect a real drone (MAVLink)
+
+    python3 demo_mavlink.py /dev/ttyUSB0          # USB
+    python3 demo_mavlink.py udp:192.168.1.10:14550 # WiFi/4G
+    python3 demo_mavlink.py --emulator             # No drone needed

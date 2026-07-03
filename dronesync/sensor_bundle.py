@@ -1,3 +1,4 @@
+from dronesync.identity import DRONE_ID
 """
 DroneSync - Sensor Bundle
 Packages sensor data + trajectory + PoPW into one signed evidence bundle.
@@ -19,7 +20,7 @@ class SensorBundle:
 
     def pack(self, mission_id: str, trajectory,
              sensor_data, popw_record: dict,
-             drone_id: str = "DRONE_001") -> dict:
+             drone_id: str = DRONE_ID) -> dict:
         """
         Pack all mission evidence into a signed bundle.
         This is what gets submitted to Konnex validation layer.

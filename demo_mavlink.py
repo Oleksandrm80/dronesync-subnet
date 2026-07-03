@@ -88,15 +88,14 @@ def _generate_popw(trajectory, sensor_data, source: str):
 
     pipeline = MissionPipeline()
     result = pipeline.run(mission, trajectory=trajectory, sensor_data=sensor_data, score=75.0)
-    score = result.get("score", 0)
-    popw = result.get("popw", {})
+    score = result.get("checks", {}).get("score", 0)
+    popw = result.get("popw_record", {})
 
     print(f"\n--- PoPW Result ---")
     print(f"  Score:            {score:.1f}/100")
-    print(f"  Computation hash: {popw.get('computation_hash', 'N/A')[:32]}...")
-    print(f"  Simulation steps: {popw.get('simulation_steps', 'N/A')}")
-    print(f"  Energy estimate:  {popw.get('energy_estimate', 'N/A')}")
-    print(f"  Constraints OK:   {popw.get('constraints_satisfied', 'N/A')}")
+    print(f"  TEE status:       {result.get('checks', {}).get('popw_tee_valid', 'N/A')}")
+    print(f"  On-chain ready:   {result.get('on_chain_ready', False)}")
+    print(f"  Status:           {result.get('status', 'N/A')}")
     print(f"  Source:           {source}")
 
     traj_bytes = json.dumps(trajectory.positions, sort_keys=True).encode()
@@ -111,8 +110,36 @@ def _generate_popw(trajectory, sensor_data, source: str):
     print(f"{'='*60}\n")
 
 
+
+def run_emulator(duration_ticks: int = 100):
+    from dronesync.mavlink_emulator import MAVLinkEmulator, telemetry_to_score
+    from dronesync.protocol import Trajectory, SensorData
+    print("\n" + "="*60)
+    print("DroneSync — MAVLink Emulator → PoPW")
+    print("="*60)
+    emulator = MAVLinkEmulator(start_lat=0.0, start_lon=0.0)
+    frames = emulator.run_mission(duration_ticks=duration_ticks)
+    score_result = telemetry_to_score(frames)
+    positions = [[f["lat"], f["lon"], f["alt"], f["timestamp"]] for f in frames if f["lat"] != 0.0]
+    velocities = [f["speed_ms"] for f in frames if f["lat"] != 0.0]
+    timestamps = [int(f["timestamp"] * 1000) for f in frames if f["lat"] != 0.0]
+    trajectory = Trajectory(
+        positions=positions, velocities=velocities, timestamps=timestamps,
+        metadata={"source": "emulator", "frame_count": len(frames),
+                  "duration_s": len(frames), "avg_battery": score_result["battery_avg"],
+                  "max_altitude": max(f["alt"] for f in frames),
+                  "max_speed": score_result["speed_avg"]}
+    )
+    sensor_data = SensorData(lidar_points=[], camera_detections=[],
+                             imu_data={"source": "emulator", "frames": len(frames)},
+                             timestamp=int(time.time() * 1000))
+    print(f"  Grade: {score_result['grade']} | Score: {score_result['total_score']} | Frames: {len(frames)}")
+    _generate_popw(trajectory, sensor_data, source="emulator")
+
 if __name__ == "__main__":
-    if "--replay" in sys.argv:
+    if "--emulator" in sys.argv:
+        run_emulator()
+    elif "--replay" in sys.argv:
         idx = sys.argv.index("--replay")
         if idx + 1 < len(sys.argv):
             run_replay(sys.argv[idx + 1])

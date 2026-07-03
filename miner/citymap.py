@@ -66,7 +66,7 @@ class CityMap:
     def _load_zones(self) -> list:
         """Load city zones from profile."""
         zones = []
-        for lat, lon, radius, zone_type in self.profile["no_fly_zones"]:
+        for lat, lon, radius, zone_type in self.profile.get("no_fly_zones", []):
             zones.append(CityZone(
                 lat=lat, lon=lon,
                 radius_m=radius,
@@ -120,7 +120,7 @@ class CityMap:
         """Return city map statistics."""
         return {
             "city": self.city,
-            "center": self.profile["center"],
+            "center": self.profile.get("center", (0.0, 0.0)),
             "no_fly_zones": len(self.zones),
             "zone_types": list(set(z.zone_type for z in self.zones))
         }

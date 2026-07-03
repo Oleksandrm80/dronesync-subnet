@@ -17,7 +17,7 @@ class ReplayGuard:
         db_path = persist_path if persist_path.endswith(".db") else persist_path.replace(".json", ".db") if persist_path.endswith(".json") else persist_path + ".db"
         os.makedirs(os.path.dirname(db_path), exist_ok=True)
         self._lock = threading.Lock()
-        self._db = sqlite3.connect(db_path, check_same_thread=False)
+        self._db = sqlite3.connect(db_path, check_same_thread=False, timeout=10)
         self._db.execute("PRAGMA journal_mode=WAL")
         self._db.execute("""
             CREATE TABLE IF NOT EXISTS seen_missions (

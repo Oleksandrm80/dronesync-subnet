@@ -1,24 +1,49 @@
-version: "3.9"
-
 services:
-  dronesync:
+  miner:
     build: .
     container_name: dronesync-miner
+    command: python3 main.py
     ports:
       - "8080:8080"
     volumes:
-      - ./data:/app/.dronesync_data
+      - dronesync_data:/app/.dronesync_data
+      - ~/.bittensor/wallets:/root/.bittensor/wallets:ro
     environment:
-      - DRONE_ID=DRONE_001
-      - NETWORK=testnet
+      - NETWORK=konnex-testnet
+      - NETUID=4
+      - OPENWEATHER_API_KEY=${OPENWEATHER_API_KEY}
     restart: unless-stopped
+
+  validator:
+    build: .
+    container_name: dronesync-validator
+    command: python3 -c "from dronesync.konnex_integration import ValidatorNode, SubnetConfig; import time; v = ValidatorNode('wallet', 'hotkey'); print('Validator running on NETUID', SubnetConfig.NETUID); [time.sleep(60) for _ in iter(int, 1)]"
+    volumes:
+      - dronesync_data:/app/.dronesync_data
+      - ~/.bittensor/wallets:/root/.bittensor/wallets:ro
+    environment:
+      - NETWORK=konnex-testnet
+      - NETUID=4
+    restart: unless-stopped
+    depends_on:
+      - miner
 
   dashboard:
     build: .
     container_name: dronesync-dashboard
-    command: python dashboard/app.py
+    command: python3 dashboard/app.py
     ports:
-      - "8080:8080"
+      - "8888:8888"
     volumes:
-      - ./data:/app/.dronesync_data
+      - dronesync_data:/app/.dronesync_data
+      - ~/.bittensor/wallets:/root/.bittensor/wallets:ro
+    environment:
+      - NETWORK=konnex-testnet
+      - NETUID=4
+      - OPENWEATHER_API_KEY=${OPENWEATHER_API_KEY}
     restart: unless-stopped
+    depends_on:
+      - miner
+
+volumes:
+  dronesync_data:

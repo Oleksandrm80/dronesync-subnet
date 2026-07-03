@@ -6,8 +6,8 @@ import os
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from dronesync.bittensor_integration import (
-    MinerAxon, ValidatorAxon, SubnetMetagraph, SubnetConfig
+from dronesync.konnex_integration import (
+    MinerNode as MinerAxon, ValidatorNode as ValidatorAxon, KonnexMetagraph as SubnetMetagraph, SubnetConfig
 )
 
 
