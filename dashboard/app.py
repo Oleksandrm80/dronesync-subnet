@@ -49,6 +49,16 @@ state = {
     "tx_queue": {},
     "zk_status": {},
     "mavlink_status": {},
+    "camera_ai": {
+        "enabled": False,
+        "source": "",
+        "backend": "",
+        "risk_level": "SAFE",
+        "objects": [],
+        "commentary": "",
+        "frame_id": 0,
+        "processing_ms": 0.0,
+    },
 }
 
 DRONE_IDS = [DRONE_ID]
@@ -646,6 +656,72 @@ drawSideRadar();
   </div>
 </div>
 
+<div class="slabel" style="margin-bottom:12px"><span class="slabel-dot"></span>Connect Drone · Universal Adapter</div>
+<div class="card" style="margin-bottom:20px">
+  <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:14px;align-items:end">
+    <div>
+      <div class="stat-lbl" style="margin-bottom:6px">Manufacturer</div>
+      <select id="droneManuf" style="width:100%;background:#0a0d16;border:1px solid #1a2035;color:#c8d0e0;padding:8px;font-family:monospace;font-size:11px">
+        <option value="mavlink">MAVLink (ArduPilot, PX4, Pixhawk)</option>
+        <option value="dji">DJI (Matrice, Mavic, Phantom)</option>
+        <option value="ros2">ROS2 (Skydio, Freefly, Wingtra)</option>
+      </select>
+    </div>
+    <div>
+      <div class="stat-lbl" style="margin-bottom:6px">Connection</div>
+      <select id="droneMethod" style="width:100%;background:#0a0d16;border:1px solid #1a2035;color:#c8d0e0;padding:8px;font-family:monospace;font-size:11px">
+        <option value="udp">UDP (WiFi)</option>
+        <option value="usb">USB Cable</option>
+        <option value="tcp">TCP</option>
+        <option value="serial">Serial</option>
+        <option value="custom">Custom Address</option>
+      </select>
+    </div>
+    <div>
+      <div class="stat-lbl" style="margin-bottom:6px">Address (optional)</div>
+      <input id="droneAddr" placeholder="e.g. udp:192.168.1.1:14550" style="width:100%;background:#0a0d16;border:1px solid #1a2035;color:#c8d0e0;padding:8px;font-family:monospace;font-size:11px">
+    </div>
+    <div>
+      <button onclick="connectDrone()" style="width:100%;background:transparent;border:1px solid #00d4ff;color:#00d4ff;padding:10px;font-family:monospace;font-size:11px;letter-spacing:2px;cursor:pointer;text-transform:uppercase">CONNECT DRONE</button>
+    </div>
+  </div>
+  <div id="connectStatus" style="margin-top:12px;font-size:11px;color:#4a5570"></div>
+</div>
+<script>
+function connectDrone() {
+  const manuf = document.getElementById("droneManuf").value;
+  const method = document.getElementById("droneMethod").value;
+  const addr = document.getElementById("droneAddr").value;
+  const btn = event.target;
+  btn.textContent = "CONNECTING...";
+  btn.style.borderColor = "#ffab00";
+  btn.style.color = "#ffab00";
+  fetch("/api/connect-drone", {
+    method: "POST",
+    headers: {"Content-Type": "application/json"},
+    body: JSON.stringify({manufacturer: manuf, method: method, custom_address: addr})
+  }).then(r => r.json()).then(d => {
+    const el = document.getElementById("connectStatus");
+    if (d.success) {
+      el.style.color = "#00e676";
+      el.textContent = "CONNECTED - " + JSON.stringify(d.status);
+      btn.textContent = "CONNECTED";
+      btn.style.borderColor = "#00e676";
+      btn.style.color = "#00e676";
+    } else {
+      el.style.color = "#ff3d57";
+      el.textContent = "FAILED - " + (d.error || JSON.stringify(d));
+      btn.textContent = "CONNECT DRONE";
+      btn.style.borderColor = "#00d4ff";
+      btn.style.color = "#00d4ff";
+    }
+  }).catch(e => {
+    document.getElementById("connectStatus").textContent = "Error: " + e;
+    btn.textContent = "CONNECT DRONE";
+  });
+}
+</script>
+
 <div class="map-section">
   <div class="slabel"><span class="slabel-dot"></span>Airspace · Live Trajectory</div>
   <div class="map-wrap">
@@ -781,7 +857,8 @@ drawSideRadar();
 
 <div class="slabel" style="margin-bottom:12px"><span class="slabel-dot"></span>Blockchain Feed · Live On-Chain Transactions</div>
 <div class="card" style="margin-bottom:20px">
-  <div class="feed">{blockchain_feed}</div>
+  <div class="feed">{camera_panel}
+{blockchain_feed}</div>
 </div>
 
 <div class="bot-grid">
@@ -1073,6 +1150,143 @@ setTimeout(()=>location.reload(), 30000);
 </script>
 </body>
 </html>"""
+
+
+
+_camera_adapter = None
+_vision_engine = None
+
+def _handle_camera_start(body: dict) -> dict:
+    global _camera_adapter, _vision_engine
+    import threading
+    try:
+        from dronesync.camera_adapter import CameraAdapter, CameraConfig
+        from dronesync.vision_engine import VisionEngine
+        source_type = body.get("source", "usb")
+        address = body.get("address", "")
+        use_gpt4v = body.get("use_gpt4v", False)
+        api_key = body.get("api_key", "")
+        if source_type == "rtsp":
+            cfg = CameraConfig.from_rtsp(address)
+        elif source_type == "file":
+            cfg = CameraConfig.from_file(address)
+        elif source_type == "mavlink":
+            cfg = CameraConfig.from_mavlink(address or "udp:127.0.0.1:14550")
+        elif source_type == "ros2":
+            cfg = CameraConfig.from_ros2(address or "/camera/image_raw")
+        else:
+            cfg = CameraConfig.from_usb(int(address) if address.isdigit() else 0)
+        _camera_adapter = CameraAdapter(cfg)
+        _vision_engine = VisionEngine(use_yolo=True, use_gpt4v=use_gpt4v, openai_api_key=api_key)
+        backend = _vision_engine.start()
+        ok = _camera_adapter.start()
+        if not ok:
+            return {"ok": False, "error": "Camera failed to open"}
+        state["camera_ai"]["enabled"] = True
+        state["camera_ai"]["source"] = source_type
+        state["camera_ai"]["backend"] = backend
+        def _ai_loop():
+            for frame in _camera_adapter.stream_frames(max_frames=99999):
+                if not state["camera_ai"]["enabled"]:
+                    break
+                report = _vision_engine.analyze(frame)
+                state["camera_ai"]["risk_level"] = report.risk_level
+                state["camera_ai"]["objects"] = [o.label for o in report.objects]
+                state["camera_ai"]["commentary"] = report.ai_commentary
+                state["camera_ai"]["frame_id"] = report.frame_id
+                state["camera_ai"]["processing_ms"] = report.processing_ms
+        threading.Thread(target=_ai_loop, daemon=True).start()
+        return {"ok": True, "backend": backend, "source": source_type}
+    except Exception as e:
+        return {"ok": False, "error": str(e)}
+
+
+def _handle_camera_stop() -> dict:
+    global _camera_adapter, _vision_engine
+    state["camera_ai"]["enabled"] = False
+    if _camera_adapter:
+        _camera_adapter.stop()
+        _camera_adapter = None
+    _vision_engine = None
+    return {"ok": True}
+
+
+def _build_camera_panel() -> str:
+    cam = state.get("camera_ai", {})
+    enabled = cam.get("enabled", False)
+    risk = cam.get("risk_level", "SAFE")
+    objects = cam.get("objects", [])
+    backend = cam.get("backend", "")
+    source = cam.get("source", "")
+    commentary = cam.get("commentary", "")
+    frame_id = cam.get("frame_id", 0)
+    ms = cam.get("processing_ms", 0.0)
+    risk_color = "#00ff88" if risk == "SAFE" else "#ffaa00" if risk == "WARNING" else "#ff4455"
+    status_dot = "#00ff88" if enabled else "#4a6080"
+    obj_html = "".join(
+        f'<span style="background:#0a1828;border:1px solid #1a2840;padding:2px 8px;border-radius:3px;margin:2px;display:inline-block;font-size:11px">{o}</span>'
+        for o in objects
+    ) if objects else '<span style="color:#4a6080">No objects detected</span>'
+    commentary_html = f'<div style="margin-top:8px;font-size:11px;color:#7a8ba0;font-style:italic" id="camCommentary">{commentary}</div>' if commentary else '<div id="camCommentary"></div>'
+    active_label = ("ACTIVE - " + backend + " - " + source) if enabled else "OFFLINE"
+    return f"""<div style="background:#070d1a;border:1px solid #1a2840;border-radius:8px;padding:16px;margin-bottom:16px">
+  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
+    <div style="font-family:monospace;font-size:10px;letter-spacing:.12em;color:#00d4ff;text-transform:uppercase">CAMERA AI - REAL-TIME SCENE ANALYSIS</div>
+    <div style="display:flex;gap:6px;align-items:center">
+      <div style="width:8px;height:8px;border-radius:50%;background:{status_dot}"></div>
+      <span style="font-family:monospace;font-size:10px;color:#4a6080">{active_label}</span>
+    </div>
+  </div>
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px">
+    <div>
+      <div style="font-size:9px;color:#4a6080;text-transform:uppercase;letter-spacing:.08em;margin-bottom:6px">Source</div>
+      <select id="camSource" style="width:100%;background:#0a1020;border:1px solid #1a2840;color:#c8d6e8;padding:5px 8px;border-radius:4px;font-size:12px">
+        <option value="usb">USB / Webcam</option>
+        <option value="rtsp">RTSP Stream</option>
+        <option value="file">Video File</option>
+        <option value="mavlink">MAVLink Camera</option>
+        <option value="ros2">ROS2 Topic</option>
+      </select>
+    </div>
+    <div>
+      <div style="font-size:9px;color:#4a6080;text-transform:uppercase;letter-spacing:.08em;margin-bottom:6px">Address / URL</div>
+      <input id="camAddress" placeholder="0 / rtsp://... / /path/file.mp4" style="width:100%;background:#0a1020;border:1px solid #1a2840;color:#c8d6e8;padding:5px 8px;border-radius:4px;font-size:12px" />
+    </div>
+  </div>
+  <div style="display:flex;gap:8px;margin-bottom:12px;align-items:center">
+    <button onclick="cameraStart()" style="background:#00d4ff;color:#000;border:none;padding:6px 18px;border-radius:4px;font-size:12px;font-weight:700;cursor:pointer">START</button>
+    <button onclick="cameraStop()" style="background:#1a2840;color:#c8d6e8;border:1px solid #1a2840;padding:6px 18px;border-radius:4px;font-size:12px;cursor:pointer">STOP</button>
+    <label style="font-size:11px;color:#7a8ba0;display:flex;align-items:center;gap:4px"><input type="checkbox" id="camGPT4V"> GPT-4o Vision</label>
+    <input id="camApiKey" placeholder="OpenAI API key" style="flex:1;background:#0a1020;border:1px solid #1a2840;color:#c8d6e8;padding:5px 8px;border-radius:4px;font-size:11px" />
+  </div>
+  <div style="background:#0a1020;border:1px solid #1a2840;border-radius:6px;padding:12px">
+    <div style="display:flex;justify-content:space-between;margin-bottom:8px">
+      <span style="font-family:monospace;font-size:11px;color:#4a6080">RISK LEVEL</span>
+      <span style="font-family:monospace;font-size:13px;font-weight:700;color:{risk_color}" id="camRisk">{risk}</span>
+    </div>
+    <div style="font-size:9px;color:#4a6080;text-transform:uppercase;letter-spacing:.08em;margin-bottom:6px">Detected Objects</div>
+    <div id="camObjects" style="min-height:24px">{obj_html}</div>
+    {commentary_html}
+    <div style="margin-top:8px;font-size:9px;color:#2a3850">Frame #{frame_id} - {ms:.0f}ms - backend: {backend}</div>
+  </div>
+</div>
+<script>
+function cameraStart() {{
+  fetch("/api/camera/start",{{method:"POST",headers:{{"Content-Type":"application/json"}},body:JSON.stringify({{source:document.getElementById("camSource").value,address:document.getElementById("camAddress").value,use_gpt4v:document.getElementById("camGPT4V").checked,api_key:document.getElementById("camApiKey").value}})}}).then(r=>r.json()).then(d=>{{if(!d.ok)alert("Error: "+d.error)}});
+}}
+function cameraStop() {{
+  fetch("/api/camera/stop",{{method:"POST"}});
+}}
+setInterval(()=>{{
+  fetch("/api/camera/state").then(r=>r.json()).then(d=>{{
+    document.getElementById("camRisk").textContent=d.risk_level;
+    document.getElementById("camRisk").style.color=d.risk_level==="SAFE"?"#00ff88":d.risk_level==="WARNING"?"#ffaa00":"#ff4455";
+    const obs=d.objects||[];
+    document.getElementById("camObjects").innerHTML=obs.length?obs.map(o=>`<span style="background:#0a1828;border:1px solid #1a2840;padding:2px 8px;border-radius:3px;margin:2px;display:inline-block;font-size:11px">${{o}}</span>`).join(""):"<span style=color:#4a6080>No objects detected</span>";
+    document.getElementById("camCommentary").textContent=d.commentary||"";
+  }});
+}},1000);
+</script>"""
 
 
 def render_dashboard() -> str:
@@ -1544,6 +1758,7 @@ def render_dashboard() -> str:
         "{mpc_panel}": mpc_panel,
         "{validator_auth_panel}": validator_auth_panel,
         "{blockchain_feed}": blockchain_feed,
+        "{camera_panel}": _build_camera_panel(),
     }
     for k, v in reps.items():
         html = html.replace(k, str(v))
@@ -1554,9 +1769,50 @@ class DashboardHandler(BaseHTTPRequestHandler):
     def log_message(self, fmt, *args):
         pass
 
+    def do_POST(self):
+        parsed = urlparse(self.path)
+        if parsed.path == "/api/connect-drone":
+            length = int(self.headers.get("Content-Length", 0))
+            body = json.loads(self.rfile.read(length) or b"{}")
+            result = _handle_connect_drone(body)
+            resp = json.dumps(result).encode()
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Access-Control-Allow-Origin", "*")
+            self.end_headers()
+            self.wfile.write(resp)
+        elif parsed.path == "/api/camera/start":
+            length = int(self.headers.get("Content-Length", 0))
+            body = json.loads(self.rfile.read(length) or b"{}")
+            result = _handle_camera_start(body)
+            resp = json.dumps(result).encode()
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Access-Control-Allow-Origin", "*")
+            self.end_headers()
+            self.wfile.write(resp)
+        elif parsed.path == "/api/camera/stop":
+            result = _handle_camera_stop()
+            resp = json.dumps(result).encode()
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Access-Control-Allow-Origin", "*")
+            self.end_headers()
+            self.wfile.write(resp)
+        else:
+            self.send_response(404)
+            self.end_headers()
+
     def do_GET(self):
         parsed = urlparse(self.path)
-        if parsed.path == "/api/state":
+        if parsed.path == "/api/camera/state":
+            body = json.dumps(state.get("camera_ai", {}), default=str).encode()
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Access-Control-Allow-Origin", "*")
+            self.end_headers()
+            self.wfile.write(body)
+        elif parsed.path == "/api/state":
             body = json.dumps(state, default=str).encode()
             self.send_response(200)
             self.send_header("Content-Type", "application/json")
@@ -1602,3 +1858,25 @@ def run_dashboard(host: str = "0.0.0.0", port: int = 8080):
 
 if __name__ == "__main__":
     run_dashboard()
+
+
+# ─── DRONE CONNECT API (POST /api/connect-drone) ───────────────────────────
+_drone_connector = None
+
+def _handle_connect_drone(body: dict) -> dict:
+    global _drone_connector
+    manufacturer = body.get("manufacturer", "mavlink")
+    method = body.get("method", "udp")
+    custom = body.get("custom_address", "")
+    model = body.get("model", "")
+    try:
+        from dronesync.drone_connector import DroneConnector
+        if _drone_connector and _drone_connector.is_connected:
+            _drone_connector.disconnect()
+        _drone_connector = DroneConnector.from_ui(manufacturer, method, custom, model)
+        ok = _drone_connector.connect()
+        status = _drone_connector.get_status()
+        state["mavlink_status"] = {"available": ok, "status": "CONNECTED" if ok else "FAILED", **status}
+        return {"success": ok, "status": status}
+    except Exception as e:
+        return {"success": False, "error": str(e)}
