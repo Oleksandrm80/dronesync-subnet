@@ -32,9 +32,11 @@ class Ed25519Signer:
             self.public_key_hex = pub_bytes.hex()
             self._backend = "cryptography"
         except ImportError:
-            # Fallback: HMAC-SHA256 симуляция если cryptography не установлен
+            # Fallback: HMAC-SHA256 if cryptography not installed
+            # WARNING: not for production — install cryptography package
             self._secret = os.urandom(32)
-            self.public_key_hex = self._secret.hex()
+            # Never expose the HMAC secret as public key
+            self.public_key_hex = hashlib.sha256(self._secret).hexdigest()
             self._backend = "hmac_fallback"
 
     def sign(self, data: bytes) -> str:
@@ -155,11 +157,11 @@ class CommandSigner:
     def __init__(self, secret_key: Optional[str] = None):
         import os
         self.secret = (secret_key or os.urandom(32).hex()).encode()
-        self.nonce_cache: set = set()
+        self.nonce_cache: dict = {}  # nonce -> timestamp, TTL 300s
 
     def sign_command(self, command: dict) -> dict:
         """Sign a mission command with HMAC."""
-        nonce = str(int(time.time() * 1000))
+        nonce = os.urandom(16).hex()
         command["nonce"] = nonce
         command["timestamp"] = int(time.time())
 
@@ -180,7 +182,7 @@ class CommandSigner:
 
         if nonce in self.nonce_cache:
             return False
-        self.nonce_cache.add(nonce)
+        self.nonce_cache[nonce] = time.time()
 
         cmd_time = command.get("timestamp", 0)
         if abs(time.time() - cmd_time) > 30:

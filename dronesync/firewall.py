@@ -33,6 +33,8 @@ class DroneFirewall:
         timestamp = command.get("timestamp", 0)
 
         if source in self.trusted_sources:
+            if action not in self.ALLOWED_ACTIONS:
+                return self._block(command, "unknown_action")
             entry = {"action": action, "source": source, "timestamp": int(time.time()), "status": "ALLOWED"}
             self.allowed_log.append(entry)
             return {"status": "ALLOWED", "action": action}

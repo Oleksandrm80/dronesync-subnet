@@ -118,7 +118,7 @@ class ZKProver:
             # Generate witness
             r = subprocess.run(
                 ["node", self._gen_witness, self._wasm, input_path, witness_path],
-                capture_output=True, text=True
+                capture_output=True, text=True, timeout=60
             )
             if r.returncode != 0:
                 logger.error("Witness generation failed: %s", r.stderr)
@@ -128,7 +128,7 @@ class ZKProver:
             r = subprocess.run(
                 ["node", os.path.join(self.zk_dir, "node_modules/.bin/snarkjs"), "groth16", "prove",
                  self._zkey, witness_path, proof_path, public_path],
-                capture_output=True, text=True
+                capture_output=True, text=True, timeout=120
             )
             if r.returncode != 0:
                 logger.error("Proof generation failed: %s", r.stderr)
@@ -160,10 +160,10 @@ class ZKProver:
             r = subprocess.run(
                 ["node", os.path.join(self.zk_dir, "node_modules/.bin/snarkjs"), "groth16", "verify",
                  self._vkey, public_path, proof_path],
-                capture_output=True, text=True
+                capture_output=True, text=True, timeout=60
             )
 
-            ok = "OK" in r.stdout
+            ok = r.returncode == 0 and "OK!" in r.stdout
             logger.info("ZK proof verification: %s", "VALID" if ok else "INVALID")
             return ok
 

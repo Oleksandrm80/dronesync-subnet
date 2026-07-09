@@ -41,10 +41,11 @@ class SwarmConsensus:
         if total_weight == 0:
             return {"status": "REJECTED", "reason": "no_active_drones"}
 
+        active_drones_set = set(active_drones)
         approval_weight = sum(
             self._weight(drone_id)
             for drone_id, vote in route_safe_votes
-            if vote and drone_id not in self.blacklist
+            if vote and drone_id in active_drones_set and drone_id not in self.blacklist
         )
         approval_rate = approval_weight / total_weight
 

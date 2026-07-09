@@ -1,7 +1,10 @@
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Depends, Security
+from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
+from dronesync.auth import get_auth_db, Client, ROLE_PERMISSIONS
 from pydantic import BaseModel, Field, field_validator
 from typing import List, Optional
 import time
+import uuid
 
 from miner.planner import DronePlanner
 from environment.sim import DroneEnvironment
@@ -14,6 +17,21 @@ from dronesync.identity import DRONE_ID, VALIDATOR_ID
 
 
 app = FastAPI(title="DroneSync API", version="1.0")
+
+_security = HTTPBearer()
+
+def verify_token(credentials: HTTPAuthorizationCredentials = Security(_security)) -> Client:
+    client = get_auth_db().verify_key(credentials.credentials)
+    if not client:
+        raise HTTPException(status_code=401, detail="Invalid or missing API key")
+    return client
+
+def require_permission(permission: str):
+    def checker(client: Client = Depends(verify_token)) -> Client:
+        if permission not in client.permissions:
+            raise HTTPException(status_code=403, detail=f"Permission denied: {permission}")
+        return client
+    return checker
 
 planner = DronePlanner()
 validator = DroneEvaluator()
@@ -56,7 +74,7 @@ class _WP:
 
 class _Mission:
     def __init__(self, req: MissionRequest):
-        self.mission_id = "DSYNC_" + str(int(time.time()))
+        self.mission_id = "DSYNC_" + uuid.uuid4().hex[:12].upper()
         self.origin = _WP(req.origin.lat, req.origin.lon, req.origin.alt, req.origin.speed)
         self.destination = _WP(req.destination.lat, req.destination.lon, req.destination.alt, req.destination.speed)
         self.waypoints = [_WP(w.lat, w.lon, w.alt, w.speed) for w in req.waypoints]
@@ -133,3 +151,40 @@ def popw_latest():
 def get_scoreroot():
     commitment = scoreroot.commit()
     return commitment
+
+# ── Admin endpoints — управление клиентами ─────────────────────────────────
+
+class CreateClientRequest(BaseModel):
+    name: str
+    role: str  # admin | fleet_manager | operator | validator | customer
+
+@app.post("/admin/clients/create")
+def create_client(req: CreateClientRequest, client: Client = Depends(require_permission("admin:all"))):
+    try:
+        result = get_auth_db().create_client(req.name, req.role)
+        return result
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+@app.get("/admin/clients")
+def list_clients(client: Client = Depends(require_permission("admin:all"))):
+    return get_auth_db().list_clients()
+
+@app.post("/admin/clients/{client_id}/revoke")
+def revoke_client(client_id: str, client: Client = Depends(require_permission("admin:all"))):
+    get_auth_db().revoke_client(client_id)
+    return {"status": "revoked", "client_id": client_id}
+
+@app.get("/admin/stats")
+def get_stats(client: Client = Depends(require_permission("admin:all"))):
+    return get_auth_db().get_stats()
+
+@app.get("/me")
+def get_me(client: Client = Depends(verify_token)):
+    return {
+        "client_id": client.client_id,
+        "name": client.name,
+        "role": client.role,
+        "permissions": list(client.permissions),
+        "request_count": client.request_count,
+    }

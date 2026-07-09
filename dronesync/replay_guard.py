@@ -76,8 +76,13 @@ class ReplayGuard:
     def register(self, mission_id: str):
         with self._lock:
             self._db.execute(
-                "INSERT OR REPLACE INTO seen_missions VALUES (?, ?)",
+                "INSERT OR IGNORE INTO seen_missions VALUES (?, ?)",
                 (mission_id, time.time())
+            )
+            # Чистим устаревшие записи
+            self._db.execute(
+                "DELETE FROM seen_missions WHERE first_seen_at < ?",
+                (time.time() - self.MAX_AGE_SECONDS,)
             )
             self._db.commit()
 
@@ -96,7 +101,6 @@ class ReplayGuard:
         status_hash = hashlib.sha256(str(seen_list).encode()).hexdigest()
         return {
             "total_seen": len(seen_list),
-            "seen_missions": seen_list,
             "status_hash": status_hash,
             "on_chain_ready": True
         }

@@ -29,7 +29,11 @@ PUBLIC_KEY = get_public_key()
 def get_validator_id() -> str:
     try:
         validator_path = os.environ.get("VALIDATOR_HOTKEY_PATH", HOTKEY_PATH)
-        with open(os.path.expanduser(validator_path)) as f:
+        resolved = os.path.realpath(os.path.expanduser(validator_path))
+        allowed_base = os.path.realpath(os.path.expanduser("~/.bittensor/"))
+        if not resolved.startswith(allowed_base):
+            raise ValueError(f"Path outside allowed directory: {validator_path}")
+        with open(resolved) as f:
             data = json.load(f)
         return data["ss58Address"]
     except Exception:

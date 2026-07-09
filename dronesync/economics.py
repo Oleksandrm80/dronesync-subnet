@@ -82,7 +82,15 @@ class RewardCalculator:
         tier_mult = TIER_MULTIPLIERS.get(reputation_tier.upper(), 1.0)
         penalty = min(MAX_PENALTY, max(0, safety_violations) * PENALTY_PER_VIOLATION)
 
-        if grade in ("EXCELLENT", "GOOD"):
+        # Вычисляем grade из реального счёта — не доверяем внешнему параметру
+        if total_score >= 0.85:
+            derived_grade = "EXCELLENT"
+        elif total_score >= 0.70:
+            derived_grade = "GOOD"
+        else:
+            derived_grade = "POOR"
+
+        if derived_grade in ("EXCELLENT", "GOOD"):
             self._streak += 1
         else:
             self._streak = 0

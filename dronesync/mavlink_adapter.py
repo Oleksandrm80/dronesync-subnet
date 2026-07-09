@@ -118,7 +118,6 @@ class MAVLinkAdapter:
             timestamps.append(int(f.timestamp * 1000))
         metadata = {
             "source": "mavlink",
-            "connection": self.connection_string,
             "frame_count": len(self._frames),
             "duration_s": (self._frames[-1].timestamp - self._frames[0].timestamp)
                           if len(self._frames) >= 2 else 0,

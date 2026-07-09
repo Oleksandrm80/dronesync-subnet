@@ -48,10 +48,25 @@ class TEEAttestation:
     TEE_VERSION = "dronesync-tee-v2"
     HARDWARE_ID = "SGX_SIM_001"
 
+    # Реестр доверенных публичных ключей TEE
+    # В production загружается из конфига или смарт-контракта
+    _trusted_keys: set = set()
+
     def __init__(self):
         self.attestation_count = 0
         self._keypair = DroneKeyPair()
         self.public_key = self._keypair.public_key_hex
+        # Регистрируем свой ключ как доверенный
+        TEEAttestation._trusted_keys.add(self.public_key)
+
+    @classmethod
+    def register_trusted_key(cls, public_key_hex: str):
+        """Добавить доверенный публичный ключ TEE в реестр."""
+        cls._trusted_keys.add(public_key_hex)
+
+    @classmethod
+    def is_trusted_key(cls, public_key_hex: str) -> bool:
+        return public_key_hex in cls._trusted_keys
 
     def attest_mission(self, mission_id: str, trajectory_hash: str, score: int) -> dict:
         self.attestation_count += 1
@@ -91,7 +106,10 @@ class TEEAttestation:
             "hardware_id": attestation["hardware_id"]
         }
         payload_bytes = json.dumps(payload, sort_keys=True).encode()
-        return DroneKeyPair.verify(payload_bytes, attestation["signature"], attestation["public_key"])
+        pub_key = attestation["public_key"]
+        if not TEEAttestation.is_trusted_key(pub_key):
+            return False
+        return DroneKeyPair.verify(payload_bytes, attestation["signature"], pub_key)
 
 
 class PoPWRecord:

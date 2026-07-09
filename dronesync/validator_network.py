@@ -100,16 +100,18 @@ class ValidatorNetwork:
                 result.votes.append(vote)
 
         reachable = sum(1 for v in responses if v is not None)
-        logger.info("Validator network: %d/%d nodes responded", reachable, len(self.node_uris))
-        total = len(result.votes)
-        if total == 0:
+        total_validators = len(self.node_uris)
+        logger.info("Validator network: %d/%d nodes responded", reachable, total_validators)
+        total_responses = len(result.votes)
+        min_responses = max(1, int(total_validators * 0.67))
+        if total_responses == 0 or reachable < min_responses:
             result.consensus = False
             result.quorum = 0.0
             result.avg_score = 0.0
         else:
             accepted = sum(1 for v in result.votes if v.get("accepted"))
-            result.quorum = accepted / total
-            result.avg_score = sum(v.get("score", 0) for v in result.votes) / total
+            result.quorum = accepted / total_validators
+            result.avg_score = sum(v.get("score", 0) for v in result.votes) / total_responses
             result.consensus = result.quorum >= 0.67
 
         result.duration_ms = (time.time() - start) * 1000

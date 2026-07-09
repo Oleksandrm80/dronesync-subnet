@@ -111,7 +111,12 @@ class CameraAdapter:
             )
             msg = mav.recv_match(type="VIDEO_STREAM_INFORMATION", blocking=True, timeout=5)
             if msg:
-                return msg.uri
+                from urllib.parse import urlparse
+                parsed = urlparse(msg.uri)
+                if parsed.scheme in ("rtsp", "rtsps") and parsed.hostname:
+                    return msg.uri
+                else:
+                    logger.error("[CameraAdapter] Rejected untrusted URI: %s", msg.uri)
         except Exception as e:
             logger.warning("[CameraAdapter] MAVLink RTSP failed: %s", e)
         return self.config.usb_index
