@@ -18,6 +18,8 @@ import logging
 from typing import Tuple, Optional
 
 from dronesync.protocol import Trajectory, SensorData
+from dronesync.pipeline import MissionPipeline
+from dronesync.protocol import MissionInstruction, MissionType, Waypoint
 from dronesync.camera_adapter import CameraAdapter, CameraConfig
 from dronesync.vision_engine import VisionEngine
 
@@ -132,7 +134,10 @@ class DroneConnector:
         self._connected = False
 
     def record_mission(self, duration_seconds: int = 30,
-                       poll_hz: int = 5) -> Tuple[Trajectory, SensorData]:
+                       poll_hz: int = 5,
+                       run_pipeline: bool = False,
+                       mission_id: str = None,
+                       score: int = 80) -> Tuple:
         if not self._connected:
             raise RuntimeError("Not connected. Call connect() first.")
         trajectory, sensor_data = self._adapter.record_mission(duration_seconds, poll_hz)
@@ -144,7 +149,24 @@ class DroneConnector:
             sensor_data.camera_detections = scene_reports
             logger.info("[DroneConnector] Camera AI: %d scene reports collected",
                         len(scene_reports))
-        return trajectory, sensor_data
+        if not run_pipeline:
+            return trajectory, sensor_data
+        import time, hashlib
+        mid = mission_id or ("CONN_" + hashlib.sha256(str(time.time()).encode()).hexdigest()[:12].upper())
+        origin = trajectory.positions[0] if trajectory.positions else [0, 0, 50]
+        dest = trajectory.positions[-1] if trajectory.positions else [0, 0, 50]
+        mission = MissionInstruction(
+            mission_id=mid,
+            mission_type=MissionType.URBAN_DELIVERY,
+            origin=Waypoint(lat=origin[0], lon=origin[1], alt=origin[2] if len(origin) > 2 else 50),
+            destination=Waypoint(lat=dest[0], lon=dest[1], alt=dest[2] if len(dest) > 2 else 50),
+        )
+        pipeline = MissionPipeline()
+        pipeline_result = pipeline.run(mission, trajectory, sensor_data, score)
+        logger.info("[DroneConnector] Pipeline: on_chain_ready=%s zk=%s",
+                    pipeline_result["on_chain_ready"],
+                    pipeline_result.get("zk_proof") is not None)
+        return trajectory, sensor_data, pipeline_result
 
     @property
     def is_connected(self) -> bool:

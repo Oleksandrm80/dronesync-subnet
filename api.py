@@ -1,4 +1,8 @@
-from fastapi import FastAPI, HTTPException, Depends, Security
+from fastapi import FastAPI, HTTPException, Depends, Security, Request
+from slowapi import Limiter
+from slowapi.util import get_remote_address
+from slowapi.errors import RateLimitExceeded
+from slowapi.middleware import SlowAPIMiddleware
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from dronesync.auth import get_auth_db, Client, ROLE_PERMISSIONS
 from pydantic import BaseModel, Field, field_validator
@@ -14,9 +18,14 @@ from dronesync.reputation import DroneReputation
 from dronesync.sensor_bundle import SensorBundle
 from validator.scoreroot import ScoreRoot
 from dronesync.identity import DRONE_ID, VALIDATOR_ID
+from dronesync.webhook import send_webhook
 
 
 app = FastAPI(title="DroneSync API", version="1.0")
+limiter = Limiter(key_func=get_remote_address, default_limits=["60/minute"])
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, lambda r, e: __import__("fastapi").responses.JSONResponse(status_code=429, content={"detail": "Rate limit exceeded"}))
+app.add_middleware(SlowAPIMiddleware)
 
 _security = HTTPBearer()
 
@@ -88,7 +97,7 @@ def root():
 
 
 @app.get("/drone/status")
-def drone_status():
+def drone_status(client: Client = Depends(require_permission("mission:read"))):
     status = reputation.get_status()
     return {
         "drone_id": DRONE_ID,
@@ -100,7 +109,8 @@ def drone_status():
 
 
 @app.post("/mission/run")
-def run_mission(req: MissionRequest):
+@limiter.limit("10/minute")
+def run_mission(req: MissionRequest, client: Client = Depends(require_permission("mission:run"))):
     mission = _Mission(req)
     trajectory = planner.plan_trajectory(mission)
     sensor_data = env.run(trajectory)
@@ -117,6 +127,7 @@ def run_mission(req: MissionRequest):
     tier = "EXCELLENT" if score >= 85 else "GOOD" if score >= 70 else "POOR"
     _reward = _calc.calculate(mission.mission_id, score / 100.0, tier, "ACTIVE")
 
+    send_webhook(client.client_id, "mission.completed", {"mission_id": mission.mission_id, "score": score, "on_chain_ready": True})
     return {
         "mission_id": mission.mission_id,
         "drone_id": mission.drone_id,
@@ -135,7 +146,7 @@ def run_mission(req: MissionRequest):
 
 
 @app.get("/popw/latest")
-def popw_latest():
+def popw_latest(client: Client = Depends(require_permission("mission:read"))):
     if not scoreroot.commitments:
         return {"status": "no missions yet"}
     c = scoreroot.commitments[-1]
@@ -148,7 +159,7 @@ def popw_latest():
 
 
 @app.get("/validator/scoreroot")
-def get_scoreroot():
+def get_scoreroot(client: Client = Depends(require_permission("validator:read"))):
     commitment = scoreroot.commit()
     return commitment
 
@@ -188,3 +199,57 @@ def get_me(client: Client = Depends(verify_token)):
         "permissions": list(client.permissions),
         "request_count": client.request_count,
     }
+
+
+# ── Webhook endpoints ──────────────────────────────────────────────────────
+
+class WebhookRegisterRequest(BaseModel):
+    url: str
+    secret: str
+
+@app.post("/webhooks/register")
+def register_webhook(req: WebhookRegisterRequest, client: Client = Depends(verify_token)):
+    from dronesync.webhook import get_webhook_db
+    result = get_webhook_db().register(client.client_id, req.url, req.secret)
+    return result
+
+@app.delete("/webhooks/{webhook_id}")
+def delete_webhook(webhook_id: int, client: Client = Depends(verify_token)):
+    from dronesync.webhook import get_webhook_db
+    get_webhook_db().deactivate(webhook_id)
+    return {"status": "deactivated", "webhook_id": webhook_id}
+
+@app.get("/webhooks")
+def list_webhooks(client: Client = Depends(verify_token)):
+    from dronesync.webhook import get_webhook_db
+    hooks = get_webhook_db().get_webhooks(client.client_id)
+    return [{"id": h["id"], "url": h["url"]} for h in hooks]
+
+
+# ── Proof of Delivery ──────────────────────────────────────────────────────
+
+class DeliveryRequest(BaseModel):
+    mission_id: str
+    destination_lat: float = Field(..., ge=-90, le=90)
+    destination_lon: float = Field(..., ge=-180, le=180)
+    actual_lat: float = Field(..., ge=-90, le=90)
+    actual_lon: float = Field(..., ge=-180, le=180)
+    altitude: float = Field(default=50.0, gt=0)
+    camera_detections: list = Field(default_factory=list)
+
+@app.post("/delivery/prove")
+def prove_delivery(req: DeliveryRequest, client: Client = Depends(require_permission("mission:run"))):
+    from dronesync.proof_of_delivery import ProofOfDelivery
+    pod = ProofOfDelivery()
+    snapshot = pod.create_snapshot(
+        mission_id=req.mission_id,
+        destination_lat=req.destination_lat,
+        destination_lon=req.destination_lon,
+        actual_lat=req.actual_lat,
+        actual_lon=req.actual_lon,
+        altitude=req.altitude,
+        camera_detections=req.camera_detections,
+    )
+    proof = pod.prove(snapshot)
+    send_webhook(client.client_id, "delivery.proved", proof.to_dict())
+    return proof.to_dict()

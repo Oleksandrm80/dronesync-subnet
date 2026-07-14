@@ -1,0 +1,16 @@
+[Unit]
+Description=DroneSync Subnet API
+After=network.target
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=/root/dronesync-subnet
+ExecStart=/root/dronesync-subnet/venv/bin/uvicorn api:app --host 0.0.0.0 --port 8080
+Restart=always
+RestartSec=5
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target

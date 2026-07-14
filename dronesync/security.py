@@ -180,9 +180,11 @@ class CommandSigner:
         received_sig = signed_command.get("signature", "")
         nonce = command.get("nonce", "")
 
+        now = time.time()
+        self.nonce_cache = {k: v for k, v in self.nonce_cache.items() if now - v < 300}
         if nonce in self.nonce_cache:
             return False
-        self.nonce_cache[nonce] = time.time()
+        self.nonce_cache[nonce] = now
 
         cmd_time = command.get("timestamp", 0)
         if abs(time.time() - cmd_time) > 30:
