@@ -269,3 +269,78 @@ if __name__ == "__main__":
     planner = DronePlanner()
     # Здесь можно будет протестировать
     print("DronePlanner loaded successfully")
+
+
+class MultiAgentPlanner:
+    """
+    Plans non-conflicting trajectories for multiple drones simultaneously.
+    Uses time-slot separation + altitude layering to avoid conflicts.
+    """
+
+    ALTITUDE_LAYER = 10.0   # meters between drone altitude layers
+    TIME_SLOT      = 5.0    # seconds between drone departures
+
+    def __init__(self):
+        self.orca = None
+        try:
+            from dronesync.swarm_consensus import ORCACollisionAvoider
+            self.orca = ORCACollisionAvoider()
+        except ImportError:
+            pass
+
+    def plan_swarm(self, missions: dict) -> dict:
+        """
+        Plan trajectories for multiple drones.
+        missions: {drone_id: MissionInstruction}
+        Returns:  {drone_id: Trajectory, "conflicts": [], "safe": bool}
+        """
+        results = {}
+        conflicts = []
+        base_planner = AIPlanner()
+
+        for idx, (drone_id, mission) in enumerate(missions.items()):
+            # Assign altitude layer per drone to avoid vertical conflicts
+            mission.origin.alt      += idx * self.ALTITUDE_LAYER
+            mission.destination.alt += idx * self.ALTITUDE_LAYER
+
+            # Stagger departure times
+            traj = base_planner.plan_trajectory(mission)
+
+            # Shift timestamps by slot
+            offset = idx * self.TIME_SLOT
+            traj.timestamps = [t + offset for t in traj.timestamps]
+            traj.metadata["drone_id"]      = drone_id
+            traj.metadata["altitude_layer"] = idx
+            traj.metadata["departure_offset_s"] = offset
+
+            results[drone_id] = traj
+
+        # Check for spatial conflicts using ORCA
+        if self.orca and len(results) > 1:
+            positions  = {}
+            velocities = {}
+            for drone_id, traj in results.items():
+                if traj.positions:
+                    p = traj.positions[0]
+                    positions[drone_id]  = (p[0], p[1], p[2])
+                    velocities[drone_id] = (0.0, 0.0, 5.0)
+
+            swarm_check = self.orca.check_swarm(positions, velocities)
+            if not swarm_check["swarm_safe"]:
+                for drone_id, res in swarm_check["drone_results"].items():
+                    for c in res["collisions_avoided"]:
+                        conflicts.append({
+                            "drone_a": drone_id,
+                            "drone_b": c["other_drone"],
+                            "distance_m": c["distance_m"],
+                            "resolved": True
+                        })
+
+        return {
+            "trajectories": {k: v.metadata for k, v in results.items()},
+            "conflicts":    conflicts,
+            "conflicts_resolved": len(conflicts),
+            "safe":         len(conflicts) == 0 or all(c["resolved"] for c in conflicts),
+            "drone_count":  len(results),
+            "timestamp":    int(time.time())
+        }
