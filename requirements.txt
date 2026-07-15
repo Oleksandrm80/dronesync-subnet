@@ -17,3 +17,4 @@ opencv-python>=4.8.0
 openai>=1.0.0
 aiofiles>=23.0.0
 python-multipart>=0.0.6
+atheris>=2.3.0
