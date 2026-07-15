@@ -179,7 +179,7 @@ def _make_task(drone_idx: int = 0) -> dict:
         {"lat": _DEMO_LAT + 0.0061, "lon": _DEMO_LON + 0.0053, "alt": 45, "speed": 5},
     ]
     return {
-        "task_id": "KNX_" + str(int(time.time() * 1000))[-8:],
+        "task_id": f"KNX_{drone_idx}_{int(time.time() * 1_000_000)}",
         "mission_type": "delivery",
         "origin": origins[drone_idx % len(origins)],
         "destination": dests[drone_idx % len(dests)],
@@ -195,19 +195,20 @@ def refresh_state():
         task = _make_task(idx)
         result = handlers[drone_id].handle(task)
         rep = handlers[drone_id].reputation.get_status()
+        security = result.get("security", {})
         state["drones"][drone_id] = {
             "drone_id": drone_id,
-            "mission_id": result["mission_id"],
+            "mission_id": result.get("mission_id", task["task_id"]),
             "status": result["status"],
-            "score": result["score"],
-            "tee_status": result["tee_status"],
-            "security_status": result["security"]["overall_status"],
-            "threat_level": result["security"]["threat_level"],
+            "score": result.get("score", 0),
+            "tee_status": result.get("tee_status", "N/A"),
+            "security_status": security.get("overall_status", "N/A"),
+            "threat_level": security.get("threat_level", "N/A"),
             "reputation_tier": rep["tier"],
             "reputation_score": rep["score"],
-            "on_chain_ready": result["on_chain_ready"],
-            "bundle_hash": result["bundle_hash"][:16] + "...",
-            "duration_s": result["duration_s"],
+            "on_chain_ready": result.get("on_chain_ready", False),
+            "bundle_hash": (result.get("bundle_hash") or "")[:16] + "...",
+            "duration_s": result.get("duration_s", 0),
             "timestamp": int(time.time()),
         }
     scores = [state["drones"][d]["score"] for d in DRONE_IDS]

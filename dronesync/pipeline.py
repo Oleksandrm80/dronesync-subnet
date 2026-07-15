@@ -209,7 +209,7 @@ class MissionPipeline:
             )
             self._log("reputation_updated",
                       drone=executing_drone_id,
-                      score=reputation_updated["reputation_score"],
+                      score=reputation_updated["score"],
                       tier=reputation_updated["tier"])
 
         # Final result
