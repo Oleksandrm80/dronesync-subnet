@@ -2,11 +2,11 @@
 DroneSync - Validator TLS Authentication
 Secures validator-to-validator communication.
 """
-import hashlib
-import hmac
 import time
 import os
 import json
+
+from dronesync.crypto_utils import hmac_sign, hmac_verify
 
 
 class ValidatorAuth:
@@ -27,7 +27,7 @@ class ValidatorAuth:
         payload["_ts"] = time.time()
         payload["_nonce"] = os.urandom(8).hex()
         body = json.dumps(payload, sort_keys=True).encode()
-        sig = hmac.new(self._secret, body, hashlib.sha256).hexdigest()
+        sig = hmac_sign(self._secret, body)
         payload["_sig"] = sig
         return payload
 
@@ -43,8 +43,7 @@ class ValidatorAuth:
             return False
 
         body = json.dumps(payload, sort_keys=True).encode()
-        expected = hmac.new(self._secret, body, hashlib.sha256).hexdigest()
-        return hmac.compare_digest(sig, expected)
+        return hmac_verify(self._secret, body, sig)
 
     def generate_token(self, validator_id: str) -> dict:
         """Generate auth token for validator handshake."""

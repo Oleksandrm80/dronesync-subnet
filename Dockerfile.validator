@@ -14,4 +14,8 @@ RUN pip install -e .
 
 RUN mkdir -p /app/.dronesync_data
 
+# Run as non-root
+RUN useradd --create-home --uid 1000 appuser && chown -R appuser:appuser /app
+USER appuser
+
 CMD ["python3", "-m", "validator.scorer"]

@@ -17,7 +17,6 @@ Camera AI:
 import logging
 from typing import Tuple, Optional
 
-from dronesync.protocol import Trajectory, SensorData
 from dronesync.pipeline import MissionPipeline
 from dronesync.protocol import MissionInstruction, MissionType, Waypoint
 from dronesync.camera_adapter import CameraAdapter, CameraConfig

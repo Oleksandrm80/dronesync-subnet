@@ -3,12 +3,11 @@ dronesync/dji_adapter.py
 DJI drone adapter via MAVLink bridge (no DJI SDK registration required).
 """
 
-import time
 import logging
 from typing import Tuple
 
 from dronesync.protocol import Trajectory, SensorData
-from dronesync.mavlink_adapter import MAVLinkAdapter, TelemetryFrame
+from dronesync.mavlink_adapter import MAVLinkAdapter
 
 logger = logging.getLogger(__name__)
 

@@ -5,11 +5,12 @@ Critical for PoPW integrity on Konnex network
 """
 from typing import Optional
 import hashlib
-import hmac
 import time
 import math
 import json
 import os
+
+from dronesync.crypto_utils import hmac_sign, hmac_verify
 
 
 class Ed25519Signer:
@@ -45,7 +46,7 @@ class Ed25519Signer:
             sig = self._private_key.sign(data)
             return sig.hex()
         else:
-            return hmac.new(self._secret, data, hashlib.sha256).hexdigest()
+            return hmac_sign(self._secret, data)
 
     def verify(self, data: bytes, signature_hex: str,
                public_key_hex: Optional[str] = None) -> bool:
@@ -58,13 +59,21 @@ class Ed25519Signer:
                 else:
                     pub_bytes = bytes.fromhex(public_key_hex)
                     pub_key = Ed25519PublicKey.from_public_bytes(pub_bytes)
-                pub_key.verify(bytes.fromhex(signature_hex), hashlib.sha256(data).digest())
+                pub_key.verify(bytes.fromhex(signature_hex), data)
                 return True
             except Exception:
                 return False
         else:
-            expected = hmac.new(self._secret, data, hashlib.sha256).hexdigest()
-            return hmac.compare_digest(signature_hex, expected)
+            if public_key_hex is not None and public_key_hex != self.public_key_hex:
+                # HMAC is symmetric -- without the 'cryptography' package there is no
+                # real public key, so cross-instance verification is impossible.
+                # Fail loudly instead of silently comparing against our own secret.
+                raise RuntimeError(
+                    "Ed25519Signer fallback (no 'cryptography' package installed) "
+                    "cannot verify signatures from other instances. "
+                    "Install 'cryptography' for real asymmetric signing/verification."
+                )
+            return hmac_verify(self._secret, data, signature_hex)
 
     def sign_popw(self, popw_hash: str, mission_id: str) -> dict:
         """Sign a PoPW record hash. Returns signature bundle."""
@@ -166,7 +175,7 @@ class CommandSigner:
         command["timestamp"] = int(time.time())
 
         payload = json.dumps(command, sort_keys=True).encode()
-        signature = hmac.new(self.secret, payload, hashlib.sha256).hexdigest()
+        signature = hmac_sign(self.secret, payload)
 
         return {
             "command": command,
@@ -191,9 +200,7 @@ class CommandSigner:
             return False
 
         payload = json.dumps(command, sort_keys=True).encode()
-        expected_sig = hmac.new(self.secret, payload, hashlib.sha256).hexdigest()
-
-        return hmac.compare_digest(received_sig, expected_sig)
+        return hmac_verify(self.secret, payload, received_sig)
 
 
 class AnomalyDetector:

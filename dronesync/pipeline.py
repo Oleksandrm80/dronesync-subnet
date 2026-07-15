@@ -23,7 +23,7 @@ import math
 from dronesync.protocol import MissionInstruction, Trajectory, SensorData
 from dronesync.verifier import PoPWRecord
 from dronesync.identity import DRONE_ID
-from dronesync.zk_prover import ZKProver, ZKVerifier
+from dronesync.zk_prover import ZKProver
 from dronesync.swarm_consensus import SwarmConsensus
 from dronesync.threat_defense import ThreatDefense
 from dronesync.sensor_bundle import SensorBundle

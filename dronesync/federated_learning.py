@@ -8,7 +8,6 @@ All drones collectively become smarter without revealing routes.
 """
 
 import json
-import os
 import time
 import hashlib
 import logging

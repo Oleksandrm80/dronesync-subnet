@@ -4,7 +4,6 @@ Tracks system health, performance metrics, and sends alerts.
 """
 import time
 import threading
-import hashlib
 from collections import deque
 
 

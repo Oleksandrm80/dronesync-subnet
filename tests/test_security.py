@@ -1,7 +1,8 @@
 """Tests for security, threat defense, and command signing."""
 import time
+import pytest
 from dronesync.security import (
-    GPSSpoofingDetector, CommandSigner, DroneSecuritySuite
+    GPSSpoofingDetector, CommandSigner, DroneSecuritySuite, Ed25519Signer
 )
 from dronesync.threat_defense import ThreatDefense
 
@@ -102,6 +103,37 @@ def test_firmware_injection_detected():
     assert not result["firmware_valid"]
     assert result["threat"] == "FIRMWARE_INJECTION"
     assert result["action"] == "REJECT_UPDATE"
+
+
+# --- Ed25519Signer ---
+
+def test_ed25519_sign_and_verify_self():
+    signer = Ed25519Signer()
+    sig = signer.sign(b"hello")
+    assert signer.verify(b"hello", sig)
+
+
+def test_ed25519_tampered_data_rejected():
+    signer = Ed25519Signer()
+    sig = signer.sign(b"hello")
+    assert not signer.verify(b"tampered", sig)
+
+
+def test_ed25519_hmac_fallback_verifies_own_signature():
+    signer = Ed25519Signer()
+    signer._backend = "hmac_fallback"
+    signer._secret = b"x" * 32
+    sig = signer.sign(b"popw-data")
+    assert signer.verify(b"popw-data", sig)
+
+
+def test_ed25519_hmac_fallback_rejects_foreign_public_key_loudly():
+    signer = Ed25519Signer()
+    signer._backend = "hmac_fallback"
+    signer._secret = b"x" * 32
+    sig = signer.sign(b"popw-data")
+    with pytest.raises(RuntimeError):
+        signer.verify(b"popw-data", sig, public_key_hex="not-our-key")
 
 
 # --- DroneSecuritySuite ---

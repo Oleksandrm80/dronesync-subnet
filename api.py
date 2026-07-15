@@ -1,13 +1,12 @@
-from fastapi import FastAPI, HTTPException, Depends, Security, Request
+from fastapi import FastAPI, HTTPException, Depends, Security
 from slowapi import Limiter
 from slowapi.util import get_remote_address
 from slowapi.errors import RateLimitExceeded
 from slowapi.middleware import SlowAPIMiddleware
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
-from dronesync.auth import get_auth_db, Client, ROLE_PERMISSIONS
+from dronesync.auth import get_auth_db, Client
 from pydantic import BaseModel, Field, field_validator
-from typing import List, Optional
-import time
+from typing import List
 import uuid
 
 from miner.planner import DronePlanner

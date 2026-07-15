@@ -9,7 +9,6 @@ import threading
 import time
 import sqlite3
 import os
-from typing import Optional
 
 
 DB_PATH = os.path.join(

@@ -11,11 +11,10 @@ import json
 import logging
 import time
 import hashlib
-from typing import Dict, List, Optional
+from typing import Dict, List
 
 import websockets
 
-from dronesync.swarm_consensus import SwarmConsensus
 from dronesync.reputation import DroneReputation
 
 logger = logging.getLogger(__name__)

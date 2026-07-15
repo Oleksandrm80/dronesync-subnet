@@ -3,9 +3,10 @@ DroneSync - Drone Firewall
 """
 import time
 import hashlib
-import hmac
 import json
 import os
+
+from dronesync.crypto_utils import hmac_verify
 
 
 class DroneFirewall:
@@ -46,12 +47,8 @@ class DroneFirewall:
             return self._block(command, "missing_signature")
 
         cmd_copy = {k: v for k, v in command.items() if k != "signature"}
-        expected_sig = hmac.new(
-            self._secret,
-            json.dumps(cmd_copy, sort_keys=True).encode(),
-            hashlib.sha256
-        ).hexdigest()
-        if not hmac.compare_digest(command["signature"], expected_sig):
+        payload = json.dumps(cmd_copy, sort_keys=True).encode()
+        if not hmac_verify(self._secret, payload, command["signature"]):
             return self._block(command, "invalid_signature")
 
         now = int(time.time())

@@ -7,7 +7,7 @@ services:
       - "8080:8080"
     volumes:
       - dronesync_data:/app/.dronesync_data
-      - ~/.bittensor/wallets:/root/.bittensor/wallets:ro
+      - ~/.bittensor/wallets:/home/appuser/.bittensor/wallets:ro
     environment:
       - NETWORK=konnex-testnet
       - NETUID=4
@@ -20,7 +20,7 @@ services:
     command: python3 -c "from dronesync.konnex_integration import ValidatorNode, SubnetConfig; import time; v = ValidatorNode('wallet', 'hotkey'); print('Validator running on NETUID', SubnetConfig.NETUID); [time.sleep(60) for _ in iter(int, 1)]"
     volumes:
       - dronesync_data:/app/.dronesync_data
-      - ~/.bittensor/wallets:/root/.bittensor/wallets:ro
+      - ~/.bittensor/wallets:/home/appuser/.bittensor/wallets:ro
     environment:
       - NETWORK=konnex-testnet
       - NETUID=4
@@ -36,7 +36,7 @@ services:
       - "8888:8888"
     volumes:
       - dronesync_data:/app/.dronesync_data
-      - ~/.bittensor/wallets:/root/.bittensor/wallets:ro
+      - ~/.bittensor/wallets:/home/appuser/.bittensor/wallets:ro
     environment:
       - NETWORK=konnex-testnet
       - NETUID=4

@@ -95,7 +95,6 @@ class VisionEngine:
             except Exception as e:
                 logger.warning("[VisionEngine] YOLOv8 failed: %s", e)
         try:
-            import cv2
             self._backend = "opencv_dnn"
             logger.info("[VisionEngine] OpenCV DNN fallback")
             return self._backend

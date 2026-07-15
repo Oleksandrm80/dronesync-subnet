@@ -122,10 +122,9 @@ class ThreatDefense:
         Verify swarm peer identity.
         Prevents MIT 2024 swarm hijacking attack.
         """
-        import hmac as _hmac
+        from dronesync.crypto_utils import hmac_verify
         secret = getattr(self, '_swarm_secret', b'dronesync-swarm-key-v1')
-        expected = _hmac.new(secret, f"{drone_id}{mission_id}".encode(), hashlib.sha256).hexdigest()
-        valid = _hmac.compare_digest(peer_signature, expected)
+        valid = hmac_verify(secret, f"{drone_id}{mission_id}".encode(), peer_signature)
         return {
             "peer_verified": valid,
             "drone_id": drone_id,

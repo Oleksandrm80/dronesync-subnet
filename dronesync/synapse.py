@@ -9,10 +9,10 @@ pipeline (planner → env → pipeline → PoPW) и возвращает
 """
 
 import time
-import hashlib
 import json
-import hmac as _hmac
-from typing import Dict
+from typing import Dict, Optional
+
+from dronesync.crypto_utils import hmac_sign
 
 from miner.planner import DronePlanner, AIPlanner
 from environment.sim import DroneEnvironment
@@ -30,71 +30,47 @@ from dronesync.identity import DRONE_ID
 from dronesync.tx_queue import TxQueue
 
 
+def _clamp_lat(v):
+    try:
+        return max(-90.0, min(90.0, float(v)))
+    except (TypeError, ValueError):
+        raise ValueError(f"Invalid latitude: {v!r}")
+
+
+def _clamp_lon(v):
+    try:
+        return max(-180.0, min(180.0, float(v)))
+    except (TypeError, ValueError):
+        raise ValueError(f"Invalid longitude: {v!r}")
+
+
+def _clamp_alt(v):
+    try:
+        return max(0.0, min(500.0, float(v)))
+    except (TypeError, ValueError):
+        return 50.0
+
+
+def _waypoint_from_dict(raw: Dict) -> WP:
+    return WP(
+        lat=_clamp_lat(raw["lat"]),
+        lon=_clamp_lon(raw["lon"]),
+        alt=_clamp_alt(raw.get("alt", 50)),
+        speed=_clamp_alt(raw.get("speed", 5)),
+    )
+
+
 class MissionAdapter:
     """Конвертирует DroneNavSynapse task → MissionInstruction."""
 
     def from_synapse_task(self, task: Dict) -> MissionInstruction:
         if not isinstance(task, dict):
             task = {}
-        origin_raw = task.get("origin", {})
-        dest_raw = task.get("destination", {})
-        if not isinstance(origin_raw, dict):
-            origin_raw = {}
-        if not isinstance(dest_raw, dict):
-            dest_raw = {}
 
-        def _clamp_lat(v):
-            try:
-                return max(-90.0, min(90.0, float(v)))
-            except (TypeError, ValueError):
-                raise ValueError(f"Invalid latitude: {v!r}")
-
-        def _clamp_lon(v):
-            try:
-                return max(-180.0, min(180.0, float(v)))
-            except (TypeError, ValueError):
-                raise ValueError(f"Invalid longitude: {v!r}")
-
-        def _clamp_alt(v):
-            try:
-                return max(0.0, min(500.0, float(v)))
-            except (TypeError, ValueError):
-                return 50.0
-
-        if "lat" not in origin_raw or "lon" not in origin_raw:
-            raise ValueError("origin must include 'lat' and 'lon'")
-        if "lat" not in dest_raw or "lon" not in dest_raw:
-            raise ValueError("destination must include 'lat' and 'lon'")
-
-        origin = WP(
-            lat=_clamp_lat(origin_raw["lat"]),
-            lon=_clamp_lon(origin_raw["lon"]),
-            alt=_clamp_alt(origin_raw.get("alt", 50)),
-            speed=_clamp_alt(origin_raw.get("speed", 5)),
-        )
-        destination = WP(
-            lat=_clamp_lat(dest_raw["lat"]),
-            lon=_clamp_lon(dest_raw["lon"]),
-            alt=_clamp_alt(dest_raw.get("alt", 50)),
-            speed=_clamp_alt(dest_raw.get("speed", 5)),
-        )
-        waypoints = []
-        for wp in task.get("waypoints", []):
-            if not isinstance(wp, dict):
-                continue
-            if "lat" not in wp or "lon" not in wp:
-                continue
-            waypoints.append(WP(
-                lat=_clamp_lat(wp["lat"]),
-                lon=_clamp_lon(wp["lon"]),
-                alt=_clamp_alt(wp.get("alt", 50)),
-                speed=_clamp_alt(wp.get("speed", 5)),
-            ))
-
-        try:
-            mission_type = MissionType(task.get("mission_type", "urban_delivery"))
-        except ValueError:
-            mission_type = MissionType.URBAN_DELIVERY
+        origin = self._parse_endpoint(task.get("origin", {}), "origin")
+        destination = self._parse_endpoint(task.get("destination", {}), "destination")
+        waypoints = self._parse_waypoints(task.get("waypoints", []))
+        mission_type = self._parse_mission_type(task.get("mission_type", "urban_delivery"))
 
         return MissionInstruction(
             mission_id=task.get("task_id", "DSYNC_" + str(int(time.time()))),
@@ -105,6 +81,30 @@ class MissionAdapter:
             drone_count=task.get("drone_count", 1),
             payload_kg=task.get("payload_kg", 0.5),
         )
+
+    @staticmethod
+    def _parse_endpoint(raw, label: str) -> WP:
+        if not isinstance(raw, dict):
+            raw = {}
+        if "lat" not in raw or "lon" not in raw:
+            raise ValueError(f"{label} must include 'lat' and 'lon'")
+        return _waypoint_from_dict(raw)
+
+    @staticmethod
+    def _parse_waypoints(raw_waypoints) -> list:
+        waypoints = []
+        for wp in raw_waypoints:
+            if not isinstance(wp, dict) or "lat" not in wp or "lon" not in wp:
+                continue
+            waypoints.append(_waypoint_from_dict(wp))
+        return waypoints
+
+    @staticmethod
+    def _parse_mission_type(value) -> MissionType:
+        try:
+            return MissionType(value)
+        except ValueError:
+            return MissionType.URBAN_DELIVERY
 
 
 class DroneNavSynapseHandler:
@@ -136,18 +136,10 @@ class DroneNavSynapseHandler:
         from dronesync.replay_guard import ReplayGuard
         self.replay_guard = ReplayGuard()
 
-    def handle(self, synapse_task: Dict) -> Dict:
-        """
-        Принимает задание от валидатора, выполняет полный DroneSync pipeline,
-        возвращает PoPW артефакт.
-        """
-        if not isinstance(synapse_task, dict):
-            return {"status": "REJECTED", "reason": "invalid_input_type", "on_chain_ready": False}
-        if not synapse_task:
-            return {"status": "REJECTED", "reason": "empty_task", "on_chain_ready": False}
-
-        waypoints = synapse_task.get("waypoints", [])
-        for wp in waypoints:
+    @staticmethod
+    def _validate_synapse_task(synapse_task: Dict) -> Optional[Dict]:
+        """Returns a REJECTED response if the raw task fails basic validation, else None."""
+        for wp in synapse_task.get("waypoints", []):
             if isinstance(wp, dict):
                 lat, lon = float(wp.get("lat", 0)), float(wp.get("lon", 0))
                 alt = float(wp.get("alt", 0.0))
@@ -165,28 +157,50 @@ class DroneNavSynapseHandler:
         if battery is not None and not (0 <= float(battery) <= 100):
             return {"status": "REJECTED", "reason": "invalid_battery", "on_chain_ready": False}
 
+        return None
+
+    def _firewall_check(self, task_id: str) -> Optional[Dict]:
+        """Returns a BLOCKED response if the firewall rejects the task, else None."""
+        cmd = {
+            "action": "execute_task",
+            "source": "konnex_validator",
+            "timestamp": int(time.time()),
+        }
+        cmd["signature"] = hmac_sign(
+            self.firewall._secret,
+            json.dumps(cmd, sort_keys=True).encode()
+        )
+        fw_result = self.firewall.filter(cmd)
+        if fw_result["status"] == "BLOCKED":
+            return {
+                "mission_id": task_id,
+                "status": "BLOCKED",
+                "reason": fw_result["reason"],
+                "on_chain_ready": False,
+            }
+        return None
+
+    def handle(self, synapse_task: Dict) -> Dict:
+        """
+        Принимает задание от валидатора, выполняет полный DroneSync pipeline,
+        возвращает PoPW артефакт.
+        """
+        if not isinstance(synapse_task, dict):
+            return {"status": "REJECTED", "reason": "invalid_input_type", "on_chain_ready": False}
+        if not synapse_task:
+            return {"status": "REJECTED", "reason": "empty_task", "on_chain_ready": False}
+
+        validation_error = self._validate_synapse_task(synapse_task)
+        if validation_error:
+            return validation_error
+
         try:
             t_start = time.time()
 
             # 1. Firewall check
-            cmd = {
-                "action": "execute_task",
-                "source": "konnex_validator",
-                "timestamp": int(time.time()),
-            }
-            cmd["signature"] = _hmac.new(
-                self.firewall._secret,
-                json.dumps(cmd, sort_keys=True).encode(),
-                hashlib.sha256
-            ).hexdigest()
-            fw_result = self.firewall.filter(cmd)
-            if fw_result["status"] == "BLOCKED":
-                return {
-                    "mission_id": synapse_task.get("task_id", "unknown"),
-                    "status": "BLOCKED",
-                    "reason": fw_result["reason"],
-                    "on_chain_ready": False,
-                }
+            fw_block = self._firewall_check(synapse_task.get("task_id", "unknown"))
+            if fw_block:
+                return fw_block
 
             # 2. Конвертируем задание в MissionInstruction
             mission = self.adapter.from_synapse_task(synapse_task)

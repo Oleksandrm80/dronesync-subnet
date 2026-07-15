@@ -122,7 +122,6 @@ class CameraAdapter:
         return self.config.usb_index
 
     def _capture_loop(self):
-        import cv2
         delay = 1.0 / max(self.config.fps, 1)
         while self._running:
             try:

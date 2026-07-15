@@ -115,27 +115,26 @@ class SecureStorage:
                 self._store = _json.load(f)
     def save(self, key: str, data: dict) -> str:
         """Encrypt and store data. Returns storage hash."""
-        import json
         payload = json.dumps(data, sort_keys=True).encode()
         encrypted = self._fernet.encrypt(payload)
-        self._store[key] = encrypted
-        import json as _json
+        # JSON can't hold raw bytes -- persist ciphertext as hex.
+        self._store[key] = encrypted.hex()
         with open(self._persist_path, "w") as f:
-            _json.dump(self._store, f)
+            json.dump(self._store, f)
         return hashlib.sha256(payload).hexdigest()
+
     def load(self, key: str) -> dict:
         """Decrypt and return data."""
-        import json
         if key not in self._store:
             return {}
-        decrypted = self._fernet.decrypt(self._store[key])
+        decrypted = self._fernet.decrypt(bytes.fromhex(self._store[key]))
         return json.loads(decrypted)
 
     def verify(self, key: str, expected_hash: str) -> bool:
         """Verify data has not been tampered with."""
         if key not in self._store:
             return False
-        decrypted = self._fernet.decrypt(self._store[key])
+        decrypted = self._fernet.decrypt(bytes.fromhex(self._store[key]))
         actual_hash = hashlib.sha256(decrypted).hexdigest()
         return actual_hash == expected_hash
 

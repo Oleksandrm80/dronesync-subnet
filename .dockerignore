@@ -1,0 +1,16 @@
+.git/
+.github/
+venv/
+venv.bak/
+.env
+.env.*
+!.env.example
+.dronesync_data/
+__pycache__/
+*.pyc
+.pytest_cache/
+.ruff_cache/
+tests/
+docs/
+*.md
+zk/node_modules/
