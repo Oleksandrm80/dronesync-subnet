@@ -1,4 +1,4 @@
-from fastapi import FastAPI, HTTPException, Depends, Security
+from fastapi import FastAPI, HTTPException, Depends, Security, Request
 from slowapi import Limiter
 from slowapi.util import get_remote_address
 from slowapi.errors import RateLimitExceeded
@@ -72,6 +72,21 @@ class MissionRequest(BaseModel):
         return v
 
 
+class LiveMissionRequest(BaseModel):
+    manufacturer: str = Field(default="mavlink")
+    connection: str = Field(default="udp:127.0.0.1:14550")
+    duration_seconds: int = Field(default=30, ge=5, le=60)
+    poll_hz: int = Field(default=5, ge=1, le=20)
+
+    @field_validator("manufacturer")
+    @classmethod
+    def validate_manufacturer(cls, v: str) -> str:
+        allowed = {"mavlink", "dji", "ros2"}
+        if v not in allowed:
+            raise ValueError(f"manufacturer must be one of {allowed}")
+        return v
+
+
 class _WP:
     def __init__(self, lat, lon, alt, speed):
         self.lat = lat
@@ -109,7 +124,7 @@ def drone_status(client: Client = Depends(require_permission("mission:read"))):
 
 @app.post("/mission/run")
 @limiter.limit("10/minute")
-def run_mission(req: MissionRequest, client: Client = Depends(require_permission("mission:run"))):
+def run_mission(request: Request, req: MissionRequest, client: Client = Depends(require_permission("mission:run"))):
     mission = _Mission(req)
     trajectory = planner.plan_trajectory(mission)
     sensor_data = env.run(trajectory)
@@ -130,6 +145,82 @@ def run_mission(req: MissionRequest, client: Client = Depends(require_permission
     return {
         "mission_id": mission.mission_id,
         "drone_id": mission.drone_id,
+        "score": score,
+        "popw": {
+            "trajectory_hash": record["trajectory_hash"][:16] + "...",
+            "attestation_id": record["attestation"]["attestation_id"],
+            "tee_status": record["attestation"]["status"],
+            "on_chain_string": popw.format_for_chain(record)
+        },
+        "bundle_hash": bundle["bundle_hash"][:16] + "...",
+        "score_root": commitment["score_root"][:16] + "...",
+        "on_chain_ready": True,
+        "reward_knx": _reward.to_dict()
+    }
+
+
+@app.post("/mission/run-live")
+@limiter.limit("5/minute")
+def run_mission_live(request: Request, req: LiveMissionRequest, client: Client = Depends(require_permission("mission:run"))):
+    """
+    Runs a mission from a REAL connected drone (MAVLink/DJI/ROS2) instead of
+    the simulator. Blocks for req.duration_seconds while recording telemetry
+    (capped at 60s) -- FastAPI runs sync endpoints in a threadpool, so this
+    does not block other requests.
+    """
+    from dronesync.drone_connector import DroneConnector
+
+    connector = DroneConnector(manufacturer=req.manufacturer, connection=req.connection)
+
+    try:
+        connected = connector.connect()
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=f"Drone connection error: {e}")
+
+    if not connected:
+        raise HTTPException(status_code=502, detail="Could not connect to drone (no heartbeat within timeout)")
+
+    try:
+        trajectory, sensor_data = connector.record_mission(
+            duration_seconds=req.duration_seconds, poll_hz=req.poll_hz
+        )
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=f"Telemetry recording failed: {e}")
+    finally:
+        connector.disconnect()
+
+    if not trajectory.positions:
+        raise HTTPException(status_code=422, detail="No GPS telemetry captured during recording window")
+
+    score = validator.score(trajectory, sensor_data)
+    mission_id = "DSYNC_LIVE_" + uuid.uuid4().hex[:12].upper()
+    record = popw.create_record(mission_id, trajectory, score)
+
+    reputation.record_mission(mission_id, score, True, 7.0)
+    scoreroot.add_score(mission_id, score, record["trajectory_hash"], "sensor_hash_001")
+    commitment = scoreroot.commit()
+
+    bundle = SensorBundle().pack(mission_id, trajectory, sensor_data, record)
+    from dronesync.economics import RewardCalculator
+    _calc = RewardCalculator()
+    tier = "EXCELLENT" if score >= 85 else "GOOD" if score >= 70 else "POOR"
+    _reward = _calc.calculate(mission_id, score / 100.0, tier, "ACTIVE")
+
+    send_webhook(client.client_id, "mission.completed", {
+        "mission_id": mission_id, "score": score, "on_chain_ready": True,
+        "source": req.manufacturer,
+    })
+
+    return {
+        "mission_id": mission_id,
+        "source": req.manufacturer,
+        "telemetry": {
+            "frame_count": trajectory.metadata.get("frame_count", len(trajectory.positions)),
+            "duration_s": trajectory.metadata.get("duration_s", 0),
+            "max_altitude": trajectory.metadata.get("max_altitude", 0),
+            "max_speed": trajectory.metadata.get("max_speed", 0),
+            "avg_battery": trajectory.metadata.get("avg_battery", 0),
+        },
         "score": score,
         "popw": {
             "trajectory_hash": record["trajectory_hash"][:16] + "...",

@@ -6,7 +6,7 @@
 
 ![Python](https://img.shields.io/badge/Python-3.10+-blue)
 ![License](https://img.shields.io/badge/License-Apache%202.0-green)
-![Tests](https://img.shields.io/badge/Tests-541%20passing-brightgreen)
+![Tests](https://img.shields.io/badge/Tests-583%20passing-brightgreen)
 ![Status](https://img.shields.io/badge/Status-Working%20Demo-brightgreen)
 ![ZK](https://img.shields.io/badge/ZK-Groth16-purple)
 
@@ -74,15 +74,6 @@ and approved by reputation-weighted Byzantine-tolerant consensus.
 
 ---
 
-## Quick Start
-
-    git clone https://github.com/Oleksandrm80/dronesync-subnet.git
-    cd dronesync-subnet
-    pip install -r requirements.txt
-    python main.py
-
----
-
 ## Demo Scripts
 
     python demo_depin.py              # Full DePIN cycle -- missions, rewards, wallet
@@ -95,7 +86,7 @@ and approved by reputation-weighted Byzantine-tolerant consensus.
 
 ## Testing
 
-    # Run all 537 tests
+    # Run all 583 tests
     python -m pytest tests/ -v
 
     # Run by category
@@ -104,7 +95,7 @@ and approved by reputation-weighted Byzantine-tolerant consensus.
     python -m pytest tests/test_zk_setup.py -v
     python -m pytest tests/test_integration.py -v
 
-537 tests passing across 41 test files -- unit, integration, security,
+583 tests passing across 45 test files -- unit, integration, security,
 chaos, concurrency, mutation, property-based, and ZK proof tests.
 
 ---
@@ -133,9 +124,10 @@ chaos, concurrency, mutation, property-based, and ZK proof tests.
 - [x] Federated learning
 - [x] MAVLink adapter
 - [x] Live dashboard -- Neural Cosmos visualization
-- [x] 537 passing tests
-- [ ] Real drone hardware integration
-- [ ] Decentralized network deployment
+- [x] 583 passing tests
+- [ ] Real drone hardware integration wired into the REST API (adapter code exists — MAVLink/DJI/ROS2 — but `/mission/run` still uses simulated telemetry)
+- [ ] Live Konnex chain connection (currently simulated locally end-to-end pending the Konnex SDK)
+- [ ] Decentralized network deployment (validator mesh protocol exists, not yet tested across multiple real machines)
 - [ ] Security audit
 - [ ] Domain + HTTPS
 
@@ -162,6 +154,11 @@ DroneSync is built as a subnet on Konnex — a decentralized network for physica
 2. Drone executes mission → generates PoPW proof
 3. Validator verifies proof → sets weights on-chain
 4. Operator earns KNX tokens proportional to mission quality
+
+> **Current status:** the Konnex chain itself is not live yet -- the full
+> pipeline above runs end-to-end today with real signing, real ZK proofs,
+> and a locally simulated chain layer (`KonnexNode`, `TxQueue`) standing in
+> for the on-chain submission until the Konnex SDK is released. See Roadmap.
 
 ---
 

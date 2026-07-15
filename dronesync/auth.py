@@ -25,10 +25,10 @@ DB_PATH = os.environ.get("DRONESYNC_AUTH_DB", os.path.expanduser("~/.dronesync/a
 
 # Права доступа по типу клиента
 ROLE_PERMISSIONS = {
-    "admin":         {"mission:run", "mission:read", "fleet:manage", "validator:vote", "admin:all"},
+    "admin":         {"mission:run", "mission:read", "fleet:manage", "validator:vote", "validator:read", "admin:all"},
     "fleet_manager": {"mission:run", "mission:read", "fleet:manage"},
     "operator":      {"mission:run", "mission:read"},
-    "validator":     {"mission:read", "validator:vote"},
+    "validator":     {"mission:read", "validator:vote", "validator:read"},
     "customer":      {"delivery:track"},
 }
 

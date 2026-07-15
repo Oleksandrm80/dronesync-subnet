@@ -156,6 +156,13 @@ class TestAuth:
         client = db.verify_key(result["api_key"])
         assert client is None
 
+    def test_validator_read_permission_granted_to_validator_and_admin(self):
+        """Regression: GET /validator/scoreroot requires validator:read --
+        it must actually be reachable by the validator and admin roles."""
+        from dronesync.auth import ROLE_PERMISSIONS
+        assert "validator:read" in ROLE_PERMISSIONS["validator"]
+        assert "validator:read" in ROLE_PERMISSIONS["admin"]
+
     def test_invalid_key(self, tmp_path, monkeypatch):
         from dronesync import auth
         monkeypatch.setattr(auth, "DB_PATH", tmp_path / "auth.db")
