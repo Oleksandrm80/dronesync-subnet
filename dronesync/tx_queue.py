@@ -93,31 +93,32 @@ class TxQueue:
         """
         submitted, failed, skipped = 0, 0, 0
 
-        with sqlite3.connect(self.db_path, timeout=10) as conn:
-            rows = conn.execute(
-                "SELECT id, mission_id, chain_string, payload, retries FROM tx_queue WHERE status='pending'"
-            ).fetchall()
-
-        for row in rows:
-            tx_id, mission_id, chain_string, payload, retries = row
-            result = self._send_to_chain(chain_string, json.loads(payload))
-
+        with self._lock:
             with sqlite3.connect(self.db_path, timeout=10) as conn:
-                if result["success"]:
-                    conn.execute(
-                        "UPDATE tx_queue SET status='submitted', submitted_at=?, tx_hash=? WHERE id=?",
-                        (int(time.time()), result.get("tx_hash"), tx_id)
-                    )
-                    submitted += 1
-                else:
-                    new_retries = retries + 1
-                    new_status = "failed" if new_retries >= self.MAX_RETRIES else "pending"
-                    conn.execute(
-                        "UPDATE tx_queue SET retries=?, status=? WHERE id=?",
-                        (new_retries, new_status, tx_id)
-                    )
-                    failed += 1
-                conn.commit()
+                rows = conn.execute(
+                    "SELECT id, mission_id, chain_string, payload, retries FROM tx_queue WHERE status='pending'"
+                ).fetchall()
+
+            for row in rows:
+                tx_id, mission_id, chain_string, payload, retries = row
+                result = self._send_to_chain(chain_string, json.loads(payload))
+
+                with sqlite3.connect(self.db_path, timeout=10) as conn:
+                    if result["success"]:
+                        conn.execute(
+                            "UPDATE tx_queue SET status='submitted', submitted_at=?, tx_hash=? WHERE id=?",
+                            (int(time.time()), result.get("tx_hash"), tx_id)
+                        )
+                        submitted += 1
+                    else:
+                        new_retries = retries + 1
+                        new_status = "failed" if new_retries >= self.MAX_RETRIES else "pending"
+                        conn.execute(
+                            "UPDATE tx_queue SET retries=?, status=? WHERE id=?",
+                            (new_retries, new_status, tx_id)
+                        )
+                        failed += 1
+                    conn.commit()
 
         return {"submitted": submitted, "failed": failed, "skipped": skipped,
                 "total_pending": len(rows)}

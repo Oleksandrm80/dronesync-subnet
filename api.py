@@ -216,7 +216,8 @@ def register_webhook(req: WebhookRegisterRequest, client: Client = Depends(verif
 @app.delete("/webhooks/{webhook_id}")
 def delete_webhook(webhook_id: int, client: Client = Depends(verify_token)):
     from dronesync.webhook import get_webhook_db
-    get_webhook_db().deactivate(webhook_id)
+    if not get_webhook_db().deactivate(webhook_id, client.client_id):
+        raise HTTPException(status_code=404, detail="Webhook not found")
     return {"status": "deactivated", "webhook_id": webhook_id}
 
 @app.get("/webhooks")

@@ -56,10 +56,14 @@ class WebhookDB:
         ).fetchall()
         return [{"id": r[0], "url": r[1], "secret": r[2]} for r in rows]
 
-    def deactivate(self, webhook_id: int):
+    def deactivate(self, webhook_id: int, client_id: str) -> bool:
         conn = self._conn()
-        conn.execute("UPDATE webhooks SET active=0 WHERE id=?", (webhook_id,))
+        cursor = conn.execute(
+            "UPDATE webhooks SET active=0 WHERE id=? AND client_id=?",
+            (webhook_id, client_id)
+        )
         conn.commit()
+        return cursor.rowcount > 0
 
 
 _db: Optional[WebhookDB] = None

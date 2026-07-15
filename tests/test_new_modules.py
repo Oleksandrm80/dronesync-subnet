@@ -109,9 +109,20 @@ class TestWebhook:
         db = webhook.get_webhook_db()
         db.register("client_002", "https://example.com/cb", "secret")
         hooks = db.get_webhooks("client_002")
-        db.deactivate(hooks[0]["id"])
+        assert db.deactivate(hooks[0]["id"], "client_002") is True
         hooks_after = db.get_webhooks("client_002")
         assert len(hooks_after) == 0
+
+    def test_deactivate_rejects_non_owner(self, tmp_path, monkeypatch):
+        from dronesync import webhook
+        monkeypatch.setattr(webhook, "DB_PATH", tmp_path / "webhooks.db")
+        monkeypatch.setattr(webhook, "_db", None)
+        db = webhook.get_webhook_db()
+        db.register("client_003", "https://example.com/cb", "secret")
+        hooks = db.get_webhooks("client_003")
+        assert db.deactivate(hooks[0]["id"], "client_999") is False
+        hooks_after = db.get_webhooks("client_003")
+        assert len(hooks_after) == 1
 
     def test_sign_payload(self):
         from dronesync.webhook import _sign_payload
