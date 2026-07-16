@@ -12,7 +12,7 @@ import json
 import threading
 import random
 import subprocess
-from http.server import HTTPServer, BaseHTTPRequestHandler
+from http.server import ThreadingHTTPServer, BaseHTTPRequestHandler
 from urllib.parse import urlparse
 
 from dronesync.synapse import DroneNavSynapseHandler
@@ -343,8 +343,19 @@ def _handle_camera_start(body: dict) -> dict:
         _camera_adapter = CameraAdapter(cfg)
         _vision_engine = VisionEngine(use_yolo=True, use_gpt4v=use_gpt4v, openai_api_key=api_key)
         backend = _vision_engine.start()
-        ok = _camera_adapter.start()
-        if not ok:
+
+        # cv2.VideoCapture() has no built-in connect timeout and can hang
+        # forever on an unreachable/slow network source (RTSP) -- never let
+        # that block the request thread.
+        start_result = {}
+        def _start():
+            start_result["ok"] = _camera_adapter.start()
+        starter = threading.Thread(target=_start, daemon=True)
+        starter.start()
+        starter.join(timeout=8)
+        if starter.is_alive():
+            return {"ok": False, "error": "Camera connection timed out"}
+        if not start_result.get("ok", False):
             return {"ok": False, "error": "Camera failed to open"}
         state["camera_ai"]["enabled"] = True
         state["camera_ai"]["source"] = source_type
@@ -1016,7 +1027,8 @@ def run_dashboard(host: str = "0.0.0.0", port: int = 8080):
     t = threading.Thread(target=background_loop, daemon=True)
     t.start()
     logger.info("[DroneSync] http://%s:%s", host, port)
-    server = HTTPServer((host, port), DashboardHandler)
+    server = ThreadingHTTPServer((host, port), DashboardHandler)
+    server.daemon_threads = True
     server.serve_forever()
 
 
